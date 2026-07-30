@@ -103,6 +103,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>출력 그룹이 있는지.</summary>
     public bool HasOutputGroups => OutputGroups.Count > 0;
 
+    /// <summary>사용자 지정 A/D 채널.</summary>
+    public ObservableCollection<AnalogPointViewModel> AnalogPoints { get; } = [];
+
+    /// <summary>A/D 채널이 있는지.</summary>
+    public bool HasAnalogPoints => AnalogPoints.Count > 0;
+
     /// <summary>
     /// 접속 표시등 상태 — 정지 / 수신 중(미접속) / 접속됨.
     /// </summary>
@@ -363,6 +369,135 @@ public sealed partial class MainWindowViewModel : ObservableObject
             : $"{resolved.Text} 추가 ({(mode == DigitalPointMode.Input ? "입력" : "출력")})";
     }
 
+    /// <summary>새 A/D 채널 주소.</summary>
+    [ObservableProperty]
+    private string _newAnalogAddress = string.Empty;
+
+    /// <summary>새 A/D 채널 별칭.</summary>
+    [ObservableProperty]
+    private string _newAnalogLabel = string.Empty;
+
+    /// <summary>새 A/D 채널 raw 최소값.</summary>
+    [ObservableProperty]
+    private string _newAnalogRawMin = "0";
+
+    /// <summary>새 A/D 채널 raw 최대값.</summary>
+    [ObservableProperty]
+    private string _newAnalogRawMax = "4000";
+
+    /// <summary>새 A/D 채널 공학단위 최소값.</summary>
+    [ObservableProperty]
+    private string _newAnalogEuMin = "0";
+
+    /// <summary>새 A/D 채널 공학단위 최대값.</summary>
+    [ObservableProperty]
+    private string _newAnalogEuMax = "10";
+
+    /// <summary>새 A/D 채널 단위 표기.</summary>
+    [ObservableProperty]
+    private string _newAnalogUnit = "V";
+
+    /// <summary>A/D 채널을 추가한다.</summary>
+    [RelayCommand]
+    private void AddAnalogPoint()
+    {
+        ErrorMessage = null;
+        var address = NewAnalogAddress.Trim();
+
+        if (!AnalogPointEntry.IsValid(address))
+        {
+            ErrorMessage = $"주소를 해석할 수 없습니다: '{address}' " +
+                "(비트 주소는 아날로그로 쓸 수 없습니다 — 예: %IW80 · %MW500 · %MD100)";
+            return;
+        }
+
+        if (!TryParseScale(out var scale))
+        {
+            return;
+        }
+
+        var entry = new AnalogPointEntry
+        {
+            Address = address, Label = NewAnalogLabel.Trim(), Scale = scale,
+        };
+        var resolved = entry.Resolve(Engine.Io.Addressing);
+
+        if (AnalogPoints.Any(p => p.Address.Area == resolved.Area
+            && p.Address.Size == resolved.Size
+            && p.Address.Offset == resolved.Offset))
+        {
+            ErrorMessage = $"'{resolved.Text}' 는 이미 목록에 있습니다.";
+            return;
+        }
+
+        try
+        {
+            AnalogPoints.Add(new AnalogPointViewModel(
+                Engine.Memory, entry, Engine.Io.Addressing, RemoveAnalogPoint));
+        }
+        catch (AddressRangeException ex)
+        {
+            ErrorMessage = ex.Message;
+            return;
+        }
+
+        NewAnalogAddress = string.Empty;
+        NewAnalogLabel = string.Empty;
+        OnPropertyChanged(nameof(HasAnalogPoints));
+        StatusMessage = $"A/D 채널 추가: {resolved.Text}";
+    }
+
+    private bool TryParseScale(out AnalogChannelScale scale)
+    {
+        scale = AnalogChannelScale.Default;
+
+        if (!int.TryParse(NewAnalogRawMin, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawMin)
+            || !int.TryParse(NewAnalogRawMax, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawMax))
+        {
+            ErrorMessage = "raw 범위가 정수가 아닙니다.";
+            return false;
+        }
+
+        if (!double.TryParse(NewAnalogEuMin, NumberStyles.Float, CultureInfo.InvariantCulture, out var euMin)
+            || !double.TryParse(NewAnalogEuMax, NumberStyles.Float, CultureInfo.InvariantCulture, out var euMax))
+        {
+            ErrorMessage = "공학단위 범위가 숫자가 아닙니다.";
+            return false;
+        }
+
+        if (rawMin == rawMax)
+        {
+            ErrorMessage = "raw 범위 폭이 0입니다.";
+            return false;
+        }
+
+        if (euMin == euMax)
+        {
+            ErrorMessage = "공학단위 범위 폭이 0입니다.";
+            return false;
+        }
+
+        scale = new AnalogChannelScale
+        {
+            RawMin = rawMin,
+            RawMax = rawMax,
+            EngineeringMin = euMin,
+            EngineeringMax = euMax,
+            Unit = NewAnalogUnit.Trim(),
+        };
+        return true;
+    }
+
+    /// <summary>A/D 채널을 제거한다.</summary>
+    public void RemoveAnalogPoint(AnalogPointViewModel? point)
+    {
+        if (point is not null && AnalogPoints.Remove(point))
+        {
+            OnPropertyChanged(nameof(HasAnalogPoints));
+            StatusMessage = $"A/D 채널 제거: {point.AddressText}";
+        }
+    }
+
     /// <summary>디지털 그룹을 제거한다(그룹의 제거 커맨드가 호출한다).</summary>
     public void RemoveDigitalPoint(DigitalPointGroupViewModel? group)
     {
@@ -473,6 +608,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             group.Refresh();
         }
 
+        foreach (var point in AnalogPoints)
+        {
+            point.Refresh();
+        }
+
         RefreshTraffic();
         OnPropertyChanged(nameof(CaptureSummary));
         NotifyServerState();
@@ -523,15 +663,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             initial.Add(new InitialValue { Address = bit.AddressText, Value = 1 });
         }
 
-        foreach (var slot in AnalogSlots)
+        foreach (var point in AnalogPoints)
         {
-            foreach (var channel in slot.Channels)
+            var raw = Engine.Memory.ReadScalar(point.Address);
+            if (raw != 0)
             {
-                var raw = Engine.Memory.ReadScalar(channel.Address);
-                if (raw != 0)
-                {
-                    initial.Add(new InitialValue { Address = channel.AddressText, Value = raw });
-                }
+                initial.Add(new InitialValue { Address = point.AddressText, Value = raw });
             }
         }
 
@@ -550,6 +687,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 .ToArray(),
             Watches = Watches.Select(w => w.ToEntry()).ToArray(),
             DigitalPoints = InputGroups.Concat(OutputGroups).Select(g => g.Entry).ToArray(),
+            AnalogPoints = AnalogPoints.Select(p => p.ToEntry()).ToArray(),
         };
     }
 
@@ -642,9 +780,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
+        AnalogPoints.Clear();
+        foreach (var entry in project.AnalogPoints)
+        {
+            try
+            {
+                AnalogPoints.Add(new AnalogPointViewModel(
+                    Engine.Memory, entry, project.Io.Addressing, RemoveAnalogPoint));
+            }
+            catch (Exception ex) when (ex is FormatException or AddressRangeException
+                or InvalidOperationException)
+            {
+                ErrorMessage = $"A/D 채널 '{entry.Address}' 를 건너뜀: {ex.Message}";
+            }
+        }
+
         OnPropertyChanged(nameof(HasWatches));
         OnPropertyChanged(nameof(HasInputGroups));
         OnPropertyChanged(nameof(HasOutputGroups));
+        OnPropertyChanged(nameof(HasAnalogPoints));
         OnPropertyChanged(nameof(RackSummary));
         OnPropertyChanged(nameof(HasAutomationRules));
         OnPropertyChanged(nameof(IsAutomationRunning));

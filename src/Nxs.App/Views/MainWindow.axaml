@@ -54,7 +54,7 @@
                 <Ellipse Classes="statusLamp listening" IsVisible="{Binding IsListeningWithoutClient}" />
                 <Ellipse Classes="statusLamp connected" IsVisible="{Binding IsClientConnected}" />
               </Grid>
-              <TextBlock Classes="mono" Text="{Binding ConnectionText}" FontSize="12"
+              <TextBlock Text="{Binding ConnectionText}" FontSize="12"
                          VerticalAlignment="Center" />
             </StackPanel>
           </Border>
@@ -129,7 +129,8 @@
                             <TextBlock Classes="muted" Text="{Binding Label}"
                                        VerticalAlignment="Center" />
                           </StackPanel>
-                          <TextBlock Classes="muted mono" Text="{Binding Subtitle}" FontSize="11" />
+                          <TextBlock Text="{Binding Subtitle}" FontSize="11"
+                                     Foreground="{StaticResource TextSecondaryBrush}" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
                                     Margin="0,0,10,0" VerticalAlignment="Center"
@@ -216,7 +217,8 @@
                             <TextBlock Classes="muted" Text="{Binding Label}"
                                        VerticalAlignment="Center" />
                           </StackPanel>
-                          <TextBlock Classes="muted mono" Text="{Binding Subtitle}" FontSize="11" />
+                          <TextBlock Text="{Binding Subtitle}" FontSize="11"
+                                     Foreground="{StaticResource TextSecondaryBrush}" />
                         </StackPanel>
                         <Button Grid.Column="1" ToolTip.Tip="이 항목 제거"
                                 Command="{Binding RemoveCommand}" VerticalAlignment="Center">
@@ -252,57 +254,102 @@
         </Grid>
       </TabItem>
 
-      <!-- A/D 입력: 공학단위 또는 raw 입력 -->
+      <!-- A/D 입력: 사용자 지정 주소 + 공학단위 ↔ raw 변환 -->
       <TabItem Header="A/D 입력">
-        <ScrollViewer>
-          <ItemsControl ItemsSource="{Binding AnalogSlots}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="vm:SlotViewModel">
-                <Border Classes="card" Padding="18" Margin="0,0,0,12">
-                  <StackPanel Spacing="12">
-                    <StackPanel Spacing="2">
-                      <TextBlock Classes="sectionTitle" Text="{Binding Title}" />
-                      <TextBlock Classes="muted mono" Text="{Binding Subtitle}" />
-                    </StackPanel>
-                    <ItemsControl ItemsSource="{Binding Channels}">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <WrapPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:AnalogChannelViewModel">
-                          <Border Classes="softCard" Padding="12" Margin="0,0,10,10" Width="184">
-                            <StackPanel Spacing="6">
-                              <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Classes="mono" Text="{Binding ChannelLabel}"
-                                           FontWeight="SemiBold" />
-                                <TextBlock Grid.Column="1" Classes="muted mono" Text="{Binding AddressText}" />
-                              </Grid>
-                              <Grid ColumnDefinitions="*,Auto">
-                                <TextBox Grid.Column="0" Classes="mono" Text="{Binding EngineeringText}" />
-                                <TextBlock Grid.Column="1" Classes="muted" Margin="6,0,0,0"
-                                           VerticalAlignment="Center" Text="{Binding UnitText}" />
-                              </Grid>
-                              <Grid ColumnDefinitions="Auto,*">
-                                <TextBlock Grid.Column="0" Classes="fieldLabel" Text="raw"
-                                           VerticalAlignment="Center" Margin="0,0,6,0" />
-                                <TextBox Grid.Column="1" Classes="mono" Text="{Binding RawText}" />
-                              </Grid>
-                              <TextBlock Classes="error" Text="{Binding Error}"
-                                         IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                         TextWrapping="Wrap" />
-                            </StackPanel>
-                          </Border>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Border Grid.Row="0" Classes="card" Padding="16" Margin="0,0,0,12">
+            <StackPanel Spacing="8">
+              <TextBlock Classes="sectionTitle" Text="A/D 채널 주소 추가" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="센서가 내는 아날로그 값을 흉내낸다. 공학단위(5 V)를 넣으면 스케일로 raw(2000)로 바꿔 메모리에 쓰고, 마스터가 그 워드를 실제 센서처럼 읽는다. 비트 주소는 쓸 수 없다." />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="주소" />
+                  <TextBox Classes="mono" Width="150" Text="{Binding NewAnalogAddress}"
+                           Watermark="%IW80" />
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
+                  <TextBox Width="200" Text="{Binding NewAnalogLabel}" Watermark="탱크 압력" />
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="raw 최소" />
+                  <TextBox Classes="mono" Width="86" Text="{Binding NewAnalogRawMin}" />
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="raw 최대" />
+                  <TextBox Classes="mono" Width="86" Text="{Binding NewAnalogRawMax}" />
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="단위 최소" />
+                  <TextBox Classes="mono" Width="86" Text="{Binding NewAnalogEuMin}" />
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="단위 최대" />
+                  <TextBox Classes="mono" Width="86" Text="{Binding NewAnalogEuMax}" />
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="단위" />
+                  <TextBox Width="64" Text="{Binding NewAnalogUnit}" Watermark="V" />
+                </StackPanel>
+                <Button Classes="accent" Content="추가" Command="{Binding AddAnalogPointCommand}"
+                        VerticalAlignment="Bottom" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Grid.Row="1" Classes="softCard" Padding="14" Margin="0,0,0,12"
+                  IsVisible="{Binding !HasAnalogPoints}">
+            <TextBlock Classes="muted" TextWrapping="Wrap"
+                       Text="아직 A/D 채널이 없습니다. 마스터가 읽는 워드 주소와 스케일을 넣으면 공학단위로 값을 조작할 수 있습니다. 목록은 .nxp 에 함께 저장됩니다." />
+          </Border>
+
+          <ScrollViewer Grid.Row="2" IsVisible="{Binding HasAnalogPoints}">
+            <ItemsControl ItemsSource="{Binding AnalogPoints}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:AnalogPointViewModel">
+                  <Border Classes="card" Padding="16" Margin="0,0,0,10">
+                    <Grid ColumnDefinitions="126,72,*,150,54,150,Auto" RowDefinitions="Auto,Auto">
+                      <TextBlock Grid.Row="0" Grid.Column="0" Classes="mono" Text="{Binding AddressText}"
+                                 FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                      <Border Grid.Row="0" Grid.Column="1" Classes="pill" Padding="7,3" Margin="0,0,10,0"
+                              VerticalAlignment="Center" HorizontalAlignment="Left">
+                        <TextBlock Classes="mono" Text="{Binding SizeText}" FontSize="10" />
+                      </Border>
+                      <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Label}"
+                                 Foreground="{StaticResource TextSecondaryBrush}"
+                                 VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+
+                      <StackPanel Grid.Row="0" Grid.Column="3" Spacing="2" Margin="0,0,8,0">
+                        <TextBlock Classes="fieldLabel" Text="공학단위" Margin="4,0,0,2" />
+                        <TextBox Classes="mono" Text="{Binding EngineeringText}" />
+                      </StackPanel>
+                      <TextBlock Grid.Row="0" Grid.Column="4" Text="{Binding UnitText}"
+                                 Foreground="{StaticResource TextSecondaryBrush}"
+                                 VerticalAlignment="Bottom" Margin="0,0,8,7" FontSize="12" />
+                      <StackPanel Grid.Row="0" Grid.Column="5" Spacing="2" Margin="0,0,10,0">
+                        <TextBlock Classes="fieldLabel" Text="raw" Margin="4,0,0,2" />
+                        <TextBox Classes="mono" Text="{Binding RawText}" />
+                      </StackPanel>
+                      <Button Grid.Row="0" Grid.Column="6" ToolTip.Tip="이 채널 제거"
+                              Command="{Binding RemoveCommand}" VerticalAlignment="Bottom">
+                        <PathIcon Data="{StaticResource IconRemove}" />
+                      </Button>
+
+                      <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="7"
+                                  Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                        <TextBlock Text="{Binding ScaleText}"
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                        <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap"
+                                   IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
       </TabItem>
 
       <!-- 워치: 사용자 지정 임의 주소 (%MW320, %MD422 …) -->
@@ -384,7 +431,7 @@
             <CheckBox Content="일시정지" IsChecked="{Binding IsTrafficPaused}" VerticalAlignment="Center" />
             <Button Content="비우기" Command="{Binding ClearTrafficCommand}" />
             <Border Classes="pill" VerticalAlignment="Center">
-              <TextBlock Classes="mono" Text="{Binding TrafficSummary}" FontSize="12" />
+              <TextBlock Text="{Binding TrafficSummary}" FontSize="12" />
             </Border>
           </StackPanel>
 
@@ -413,9 +460,9 @@
     <!-- 하단 상태 라인 + 로고/저작권 (원본 nexys-modbus-workbench 푸터 이식) -->
     <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="4,10,4,2">
       <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="18" VerticalAlignment="Center">
-        <TextBlock Classes="muted mono" Text="{Binding ServerStatusText}" VerticalAlignment="Center" />
-        <TextBlock Classes="muted mono" Text="{Binding TrafficSummary}" VerticalAlignment="Center" />
-        <TextBlock Classes="muted mono" Text="{Binding ProjectPath}" VerticalAlignment="Center"
+        <TextBlock Classes="muted" Text="{Binding ServerStatusText}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted" Text="{Binding TrafficSummary}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted" Text="{Binding ProjectPath}" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" MaxWidth="260" />
         <TextBlock Classes="muted" Text="{Binding StatusMessage}" VerticalAlignment="Center" />
         <TextBlock Classes="error" Text="{Binding ErrorMessage}" VerticalAlignment="Center"

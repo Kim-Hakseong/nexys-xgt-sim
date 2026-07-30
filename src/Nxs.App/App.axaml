@@ -272,17 +272,23 @@
 
     <!-- ==== 시뮬레이터 고유 요소 (DESIGN Rev.B) — 새 색 도입 없이 기존 토큰만 재사용 ==== -->
 
-    <!-- 데이터(주소·hex·값·프레임)는 예외 없이 monospace. 원본 MainWindow.axaml 의 인라인 값과 동일 -->
+    <!-- 데이터(주소·hex·값·프레임)는 예외 없이 monospace.
+         ⚠️ 한글 텍스트에는 이 클래스를 쓰지 않는다 — Consolas 에 한글 글리프가 없어 대체 폰트로
+         넘어가는데 줄 높이는 Consolas 기준으로 잡혀 글자 위쪽이 잘린다("정지"가 "성시"로 보임).
+         한글은 기본 Inter 폰트로 두고, 이 클래스는 ASCII 데이터에만 붙인다.
+         배포 대상이 Windows 이므로 Consolas 를 첫 후보로 둔다. -->
     <Style Selector="TextBlock.mono">
-      <Setter Property="FontFamily" Value="Menlo,Consolas,monospace" />
+      <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
       <Setter Property="FontSize" Value="12" />
     </Style>
     <Style Selector="TextBox.mono">
-      <Setter Property="FontFamily" Value="Menlo,Consolas,monospace" />
+      <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
       <Setter Property="FontSize" Value="12" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="Padding" Value="10,7" />
     </Style>
     <Style Selector="ToggleButton.mono">
-      <Setter Property="FontFamily" Value="Menlo,Consolas,monospace" />
+      <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
       <Setter Property="FontSize" Value="11" />
     </Style>
 

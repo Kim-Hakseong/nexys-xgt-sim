@@ -60,6 +60,17 @@ public class TabRenderTests
                 },
                 new WatchEntry { Address = "%ML60", Label = "적산 (배정도)", Format = WatchFormat.Double },
             ],
+            AnalogPoints =
+            [
+                new AnalogPointEntry
+                {
+                    Address = "%IW80", Label = "탱크 압력",
+                    Scale = new AnalogChannelScale
+                    {
+                        RawMin = 0, RawMax = 4000, EngineeringMin = 0, EngineeringMax = 10, Unit = "bar",
+                    },
+                },
+            ],
             DigitalPoints =
             [
                 new DigitalPointEntry { Address = "%MX900", Label = "운전 지령", Mode = DigitalPointMode.Input },
@@ -156,6 +167,29 @@ public class TabRenderTests
 
         Assert.Single(vm.InputGroups);
         Assert.Single(vm.OutputGroups);
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void AnalogTabRealisesItsUserDefinedChannels()
+    {
+        var vm = BuildPopulatedViewModel();
+        var window = new MainWindow { DataContext = vm, Width = 1240, Height = 860 };
+        window.Show();
+        var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
+
+        tabControl.SelectedIndex = 2;   // A/D 입력
+        Dispatcher.UIThread.RunJobs();
+        window.Measure(new Avalonia.Size(window.Width, window.Height));
+        window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
+        Dispatcher.UIThread.RunJobs();
+
+        var texts = window.GetVisualDescendants().OfType<TextBlock>()
+            .Select(t => t.Text ?? string.Empty).ToList();
+        Assert.Contains("%IW80", texts);
+        Assert.Contains("탱크 압력", texts);
+        Assert.Single(vm.AnalogPoints);
+
         vm.Shutdown();
     }
 

@@ -446,3 +446,33 @@ Tests 410/410 (Core 250 + Integration 61 + App 99) · 빌드 경고0/에러0
   %QW10=0x8125 출력 LED 도 동일 확인. 탭 5개만 남았는지·초안 배너가 사라졌는지 렌더 테스트로 고정.
   스크린샷 생성 시 실제로 서버를 켜고 클라이언트를 붙여 초록불이 들어온 상태를 찍었다.
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)
+
+## M13 — A/D 사용자 지정 전환 + 한글 글자 잘림 수정 (사용자 지시) · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Configuration/{WatchValue,AnalogPointEntry,NxpProject,NxpProjectFile}.cs,
+  src/Nxs.App/ViewModels/{AnalogPointViewModel,MainWindowViewModel}.cs,
+  src/Nxs.App/{App.axaml,Views/MainWindow.axaml},
+  tests/Nxs.App.Tests/{AnalogPointSmokeTests,TabRenderTests}.cs
+Tests 424/424 (Core 250 + Integration 61 + App 113) · 빌드 경고0/에러0
+
+[버그 수정] **한글이 monospace 클래스에서 위쪽이 잘렸다** — "정지"가 "성시", "건"이 "선"으로 보였다.
+  원인: Consolas 에 한글 글리프가 없어 대체 폰트로 넘어가는데 줄 높이는 Consolas 메트릭으로
+  잡혀 어센더가 잘린다. 사용자 스크린샷 표시로 발견.
+  조치: 한글이 들어가는 바인딩에서 mono 제거 — ConnectionText·ServerStatusText·TrafficSummary·
+  Subtitle·CaptureSummary·ProjectPath·ScaleText. DESIGN 은 monospace 를 **데이터**(주소·hex·값·프레임)에만
+  요구하므로 이 변경이 오히려 규칙에 더 부합한다. 남은 mono 바인딩을 전수 감사해 ASCII 전용임을 확인했다.
+  추가로 mono 폰트 후보 순서를 Consolas 우선으로 바꾸고(배포 대상이 Windows), TextBox.mono 에
+  MinHeight 34 · Padding 10,7 을 줘 디센더 여유를 확보했다.
+[결정] A/D 탭도 디지털과 같은 **사용자 지정 주소 방식**으로 전환. 랙 슬롯 5·6 고정 표시를 없앴다.
+  AnalogPointEntry(주소 + 스케일 + 바이트 순서)를 새로 두고 .nxp `analogPoints` 절에 저장한다.
+  기존 슬롯 기준 AnalogChannelSettings(`analogChannels`)는 **자동화 룰의 공학단위 스케일 공유**에
+  여전히 쓰이므로 남겼다(BuildAutomationRules). 역할이 다르다는 점을 주석에 명시.
+[결정] 추가 카드에서 스케일(raw 최소/최대 · 단위 최소/최대 · 단위)을 직접 입력하게 했다.
+  스케일 없이 주소만 받으면 채널이 무의미하다. 기본값 0~4000 ↔ 0~10 V 를 미리 채워 둔다.
+  스케일 변경은 제거 후 재추가 또는 .nxp 편집 — 행마다 4개 숫자를 인라인 편집하면 화면이 산만해진다.
+[결정] raw 는 부호 있는 정수로 다룬다(WatchValue.ToSigned/FromSigned 추가). 양극성 센서(-10~+10V)의
+  음수 raw 를 지원하려면 필요하고, 바이트 순서도 함께 적용된다.
+  주소 폭을 벗어난 raw 는 범위를 알려주며 거절한다.
+[검증] 스케일 변환을 스크린샷으로 실측 대조: 6.25/10×4000=2500 · 132.5/250×4000=2120 · 1850/4000×400=185.
+  전 탭 렌더 테스트에 A/D 탭 실체화 검사 추가.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)

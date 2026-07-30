@@ -271,6 +271,28 @@ public static class Program
         viewModel.Watches[5].ValueText = "-125";
         viewModel.Watches[6].ValueText = "165";
 
+        // 사용자 지정 A/D 채널
+        foreach (var (address, label, rawMax, euMax, unit) in new[]
+        {
+            ("%IW80", "탱크 압력", "4000", "10", "bar"),
+            ("%IW81", "유량", "4000", "250", "L/min"),
+            ("%MW600", "노즐 온도", "4000", "400", "C"),
+        })
+        {
+            viewModel.NewAnalogAddress = address;
+            viewModel.NewAnalogLabel = label;
+            viewModel.NewAnalogRawMin = "0";
+            viewModel.NewAnalogRawMax = rawMax;
+            viewModel.NewAnalogEuMin = "0";
+            viewModel.NewAnalogEuMax = euMax;
+            viewModel.NewAnalogUnit = unit;
+            viewModel.AddAnalogPointCommand.Execute(null);
+        }
+
+        viewModel.AnalogPoints[0].EngineeringText = "6.25";
+        viewModel.AnalogPoints[1].EngineeringText = "132.5";
+        viewModel.AnalogPoints[2].RawText = "1850";
+
         // 사용자 지정 디지털 점 — 임의 비트 주소를 양방향으로 확인
         foreach (var (address, label) in new[]
         {
@@ -320,19 +342,6 @@ public static class Program
         foreach (var point in outputs.Points.Where(p => p.PointNumber % 4 is 0 or 1))
         {
             viewModel.Engine.Memory.WriteBit(point.Address, true);
-        }
-
-        // AD 채널: 채널마다 다른 공학단위 값
-        for (var c = 0; c < viewModel.AnalogSlots[0].Channels.Count; c++)
-        {
-            var channel = viewModel.AnalogSlots[0].Channels[c];
-            channel.EngineeringText = (c * 0.625).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        for (var c = 0; c < viewModel.AnalogSlots[1].Channels.Count; c++)
-        {
-            viewModel.Engine.Memory.WriteScalar(
-                viewModel.AnalogSlots[1].Channels[c].Address, (uint)(1000 + (c * 137)));
         }
 
         viewModel.Refresh();

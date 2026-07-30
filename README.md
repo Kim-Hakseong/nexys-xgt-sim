@@ -3,7 +3,7 @@
 LS XGT PLC(XGI CPU) 시뮬레이터. 실장비 없이 **LabVIEW 애플리케이션을 검증**하기 위해 PLC 역할을 대신한다.
 XG5000은 실장비 없이 시뮬레이션이 불가능하므로 그 공백을 메운다.
 
-C# 12 / .NET 8 · Avalonia 11 · 테스트 410개 · 빌드 경고 0
+C# 12 / .NET 8 · Avalonia 11 · 테스트 424개 · 빌드 경고 0
 
 ![디지털 입력 패널](docs/screenshots/01-digital-input.png)
 
@@ -68,7 +68,7 @@ dotnet run --project src/Nxs.App
 
 - [ ] `Nxs.App.exe` 실행 — 설치 과정 없이 창이 뜬다
 - [ ] **"디지털 입력"** 탭에 주소를 추가해 토글해 본다 (`%MW320` 을 넣으면 16비트가 펼쳐진다)
-- [ ] **"A/D 입력"** 탭 채널에 값을 넣어 raw 변환이 맞는지 확인한다
+- [ ] **"A/D 입력"** 탭에 센서 주소와 스케일을 넣고 공학단위 값을 입력해 본다
 - [ ] **"주소 워치"** 탭에 LabVIEW 가 실제로 읽고 쓰는 주소를 추가한다 (예: `%MW320`, `%MD422`, `%ML60`)
       → 실수 값이면 형식을 `Float`/`Double` 로, 값이 뒤집혀 보이면 **바이트 순서**를 바꿔 맞춘다
 - [ ] **"디지털 입력/출력"** 탭에 마스터가 쓰는 비트 주소를 추가한다 (예: `%MX900`, `%QX2000`)
@@ -126,9 +126,15 @@ dotnet run --project src/Nxs.App
 
 ![디지털 출력 패널](docs/screenshots/02-digital-output.png)
 
-### A/D 입력 — 공학단위 ↔ raw 자동 변환
+### A/D 입력 — 아날로그 센서를 흉내낸다
 
-한쪽에 입력하면 반대쪽이 채널 스케일에 따라 자동 변환된다 (아래는 0–10 V ↔ raw 0–4000).
+**A/D 는 아날로그→디지털 변환 입력이다.** 현장 센서(압력·온도·유량)가 내는 전압/전류를
+A/D 모듈이 정수 raw 값으로 바꿔 PLC 워드에 넣고, 마스터는 그 워드를 읽어 공학단위로 환산한다.
+시뮬레이터는 그 반대를 한다 — **"6.25 bar" 라고 넣으면 raw 2500 으로 바꿔 메모리에 써서**
+LabVIEW 가 실제 센서처럼 읽게 한다.
+
+디지털 탭과 마찬가지로 **주소를 직접 지정**한다. 채널마다 스케일(raw 범위 ↔ 공학단위 범위 + 단위)을
+정하고, 공학단위·raw 어느 쪽에 넣어도 반대쪽이 자동 변환된다. 비트 주소는 쓸 수 없다.
 
 ![A/D 입력 패널](docs/screenshots/03-analog-input.png)
 
@@ -210,8 +216,13 @@ RX/TX 쌍, 거절 사유, 타임스탬프가 함께 남는다. 오류 행만 필
     { "address": "%MX801", "label": "운전 지령", "format": "Bool" }
   ],
   "digitalPoints": [
-    { "address": "%MX900", "label": "운전 지령", "mode": "Input" },
-    { "address": "%QX2000", "label": "운전 상태", "mode": "Output" }
+    { "address": "%MW320", "label": "운전 지령 워드", "mode": "Input" },
+    { "address": "%QW10", "label": "운전 상태 워드", "mode": "Output" }
+  ],
+  "analogPoints": [
+    { "address": "%IW80", "label": "탱크 압력", "order": "Dcba",
+      "scale": { "rawMin": 0, "rawMax": 4000,
+                 "engineeringMin": 0, "engineeringMax": 10, "unit": "bar" } }
   ]
 }
 ```
@@ -228,8 +239,13 @@ UI 의 "주소 워치" 탭에서 추가·제거해도 되고, 이 절을 직접 
 
 ### 사용자 지정 디지털 점 (`digitalPoints`)
 
-임의 비트 주소를 토글하거나 감시한다. `mode` 는 `Input`(사용자 토글) 또는 `Output`(LED 감시).
-비트 주소(`%..X`)만 쓸 수 있다.
+임의 주소를 비트 배열로 펼쳐 토글하거나 감시한다. `mode` 는 `Input`(사용자 토글) 또는 `Output`(LED 감시).
+비트·바이트·워드·더블워드·롱워드 모두 쓸 수 있고, 폭만큼 비트가 펼쳐진다.
+
+### 사용자 지정 A/D 채널 (`analogPoints`)
+
+임의 주소를 아날로그 값으로 다룬다. `scale` 이 공학단위 ↔ raw 변환을 정하고,
+`order` 로 바이트 순서를 맞춘다. 비트 주소는 쓸 수 없다.
 
 ### 자동화 제너레이터
 
@@ -255,7 +271,7 @@ UI 의 "주소 워치" 탭에서 추가·제거해도 되고, 이 절을 직접 
 
 ```bash
 dotnet build                      # 경고 0 / 에러 0 이어야 한다
-dotnet test                       # 전체 410개
+dotnet test                       # 전체 424개
 dotnet run --project tools/Nxs.DocShots -- docs/screenshots   # README 스크린샷 재생성
 ```
 
@@ -303,7 +319,7 @@ fixtures/labview-capture/   캡처 픽스처 (있으면 회귀 자동 편입)
 | I/O 구성 모델 → 메모리 자동 매핑 | ✅ |
 | TCP 서버 (멀티클라이언트 · 부분 수신 불변 · 연결 격리) | ✅ |
 | 요청 실행기 (개별/연속 읽기·쓰기 + 정확한 거절) | ✅ |
-| I/O 패널 UI (입력 토글 · 출력 LED · AD 채널) | ✅ |
+| I/O 패널 UI (전부 사용자 지정 주소 방식) | ✅ |
 | 값 자동화 (고정/증가/램프/사인/랜덤/토글) | ✅ 코어만 (`.nxp` 정의 · UI 탭 없음) |
 | 트래픽 로그 (RX/TX hex + 해석 + 오류 필터 + 파일 저장) | ✅ |
 | 프로젝트 파일 (.nxp JSON) | ✅ |

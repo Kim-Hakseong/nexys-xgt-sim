@@ -78,8 +78,14 @@ public sealed record NxpProject
     /// <summary>초기값 목록.</summary>
     public IReadOnlyList<InitialValue> InitialValues { get; init; } = [];
 
-    /// <summary>AD 채널 설정 목록.</summary>
+    /// <summary>
+    /// 랙 슬롯 기준 AD 채널 설정. 자동화 룰의 공학단위 스케일 공유에 쓰인다
+    /// (<see cref="BuildAutomationRules"/>). UI 의 A/D 탭은 <see cref="AnalogPoints"/> 를 쓴다.
+    /// </summary>
     public IReadOnlyList<AnalogChannelSettings> AnalogChannels { get; init; } = [];
+
+    /// <summary>사용자 지정 A/D 채널 — 임의 주소 + 스케일.</summary>
+    public IReadOnlyList<AnalogPointEntry> AnalogPoints { get; init; } = [];
 
     /// <summary>자동화 룰 목록 (PRD X-06).</summary>
     public IReadOnlyList<Automation.AutomationRuleSettings> AutomationRules { get; init; } = [];

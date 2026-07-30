@@ -213,6 +213,52 @@ public static class WatchValue
                 : null;
     }
 
+    /// <summary>바이트를 부호 있는 정수로 해석한다(아날로그 raw 값용).</summary>
+    public static long ToSigned(ReadOnlySpan<byte> memoryBytes, ByteOrder order)
+    {
+        if (memoryBytes.IsEmpty)
+        {
+            return 0;
+        }
+
+        var msb = ToMsbFirst(memoryBytes, order);
+        ulong raw = 0;
+        foreach (var b in msb)
+        {
+            raw = (raw << 8) | b;
+        }
+
+        var bits = msb.Length * 8;
+        if (bits >= 64)
+        {
+            return unchecked((long)raw);
+        }
+
+        var signBit = 1UL << (bits - 1);
+        return (raw & signBit) != 0
+            ? unchecked((long)raw) - (long)(1UL << bits)
+            : (long)raw;
+    }
+
+    /// <summary>부호 있는 정수를 지정 폭·순서의 바이트로 만든다.</summary>
+    public static byte[] FromSigned(long value, int byteLength, ByteOrder order)
+    {
+        var mask = byteLength >= 8 ? ulong.MaxValue : (1UL << (byteLength * 8)) - 1;
+        return Integer(unchecked((ulong)value) & mask, byteLength, order);
+    }
+
+    /// <summary>지정 폭에서 표현 가능한 부호 있는 정수 범위.</summary>
+    public static (long Min, long Max) SignedRange(int byteLength)
+    {
+        if (byteLength >= 8)
+        {
+            return (long.MinValue, long.MaxValue);
+        }
+
+        var half = 1L << ((byteLength * 8) - 1);
+        return (-half, half - 1);
+    }
+
     /// <summary>이 형식이 지정 폭에서 쓸 수 있는지.</summary>
     public static bool SupportsWidth(WatchFormat format, int byteLength) => format switch
     {
