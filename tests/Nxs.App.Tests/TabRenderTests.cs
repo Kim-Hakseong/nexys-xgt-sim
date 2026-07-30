@@ -80,7 +80,7 @@ public class TabRenderTests
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
         var tabCount = tabControl.ItemCount;
-        Assert.Equal(7, tabCount);
+        Assert.Equal(5, tabCount);
 
         for (var i = 0; i < tabCount; i++)
         {
@@ -154,23 +154,43 @@ public class TabRenderTests
             Assert.Contains(address, texts);
         }
 
-        Assert.Single(vm.CustomInputPoints);
-        Assert.Single(vm.CustomOutputPoints);
+        Assert.Single(vm.InputGroups);
+        Assert.Single(vm.OutputGroups);
         vm.Shutdown();
     }
 
     [AvaloniaFact]
-    public void DraftCodecNoticeIsRenderedWhenTheCodecIsADraft()
+    public void OnlyTheFiveWorkingTabsRemain()
     {
         var vm = BuildPopulatedViewModel();
         var window = new MainWindow { DataContext = vm, Width = 1240, Height = 860 };
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.True(vm.IsCodecDraft);
+        var headers = window.GetVisualDescendants().OfType<TabItem>()
+            .Select(t => t.Header?.ToString() ?? string.Empty).ToList();
+
+        Assert.Equal(
+            new[] { "디지털 입력", "디지털 출력", "A/D 입력", "주소 워치", "트래픽 로그" },
+            headers);
+        Assert.DoesNotContain("값 자동화", headers);
+        Assert.DoesNotContain("랙 구성", headers);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void DraftCodecNoticeIsGone()
+    {
+        var vm = BuildPopulatedViewModel();
+        var window = new MainWindow { DataContext = vm, Width = 1240, Height = 860 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
         var texts = window.GetVisualDescendants().OfType<TextBlock>()
             .Select(t => t.Text ?? string.Empty).ToList();
-        Assert.Contains("미검증 초안 코덱으로 동작 중입니다", texts);
+        Assert.DoesNotContain("미검증 초안 코덱으로 동작 중입니다", texts);
+        Assert.False(Nxs.Core.Protocol.Xgt.XgtFenetCodec.IsDraft);
 
         vm.Shutdown();
     }

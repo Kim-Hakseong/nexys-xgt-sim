@@ -9,9 +9,9 @@ namespace Nxs.Core.Protocol.Xgt;
 /// </summary>
 /// <remarks>
 /// <para>
-/// ⚠️⚠️ <b>미검증 초안이다.</b> spec 문서가 사내 매뉴얼 대조 없이 작성되었으므로
-/// 실장비와 다를 수 있다. <see cref="IsDraft"/> 가 그 상태를 알린다 —
-/// 앱은 이 값을 보고 "미검증 코덱" 경고를 표시한다.
+/// 2026-07-30 실제 LabVIEW 애플리케이션과의 현장 검증을 통과했다(접속·개별/연속 읽기·쓰기).
+/// 남은 미확인 항목은 spec §5 <b>에러 상태 코드 표</b> 하나 — 거절 응답의 코드 값이라
+/// 정상 경로 검증으로는 확인되지 않는다. <see cref="XgtFenetOptions.ErrorCodeMap"/> 으로 교정 가능.
 /// </para>
 /// <para>
 /// 위험을 줄이는 설계 원칙:
@@ -25,14 +25,19 @@ namespace Nxs.Core.Protocol.Xgt;
 /// </remarks>
 public sealed class XgtFenetCodec : IFrameCodec
 {
-    /// <summary>이 코덱이 미검증 초안 구현인지. spec 검증 완료 후 <c>false</c> 로 바꾼다.</summary>
-    public const bool IsDraft = true;
-
-    /// <summary>미검증 상태를 사람에게 알리는 문구.</summary>
-    public const string DraftWarning =
-        "⚠️ 미검증 초안 코덱입니다 — spec/xgt-fenet-reference.md 가 사내 매뉴얼 대조 없이 작성되었습니다. " +
-        "LabVIEW 가 접속되더라도 값·에러 코드가 실장비와 다를 수 있습니다. " +
-        "spec 문서 §8 검증 절차(캡처 1개 또는 매뉴얼 대조)를 수행하십시오.";
+    /// <summary>
+    /// 이 코덱이 미검증 초안인지.
+    /// </summary>
+    /// <remarks>
+    /// 2026-07-30 저장소 소유자가 실제 LabVIEW 애플리케이션으로 현장 검증을 수행해
+    /// 접속·읽기·쓰기가 정상 동작함을 확인했다(spec §8 절차 C). 그에 따라 <c>false</c> 로 내렸다.
+    /// <para>
+    /// 남은 미확인 항목은 <b>에러 상태 코드 표</b>(spec §5) 하나다 — 정상 경로가 아니라
+    /// 거절 응답의 코드 값이므로 현장 검증으로 확인되지 않았다. 매뉴얼 대조가 필요하며,
+    /// 그 전까지는 <see cref="XgtFenetOptions.ErrorCodeMap"/> 으로 교정할 수 있다.
+    /// </para>
+    /// </remarks>
+    public const bool IsDraft = false;
 
     private const ushort CmdReadRequest = 0x0054;
     private const ushort CmdReadResponse = 0x0055;

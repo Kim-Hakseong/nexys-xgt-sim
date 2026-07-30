@@ -91,23 +91,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>워치가 하나라도 있는지.</summary>
     public bool HasWatches => Watches.Count > 0;
 
-    /// <summary>사용자 지정 디지털 입력 점(토글).</summary>
-    public ObservableCollection<CustomDigitalPointViewModel> CustomInputPoints { get; } = [];
+    /// <summary>사용자 지정 디지털 입력 그룹(토글).</summary>
+    public ObservableCollection<DigitalPointGroupViewModel> InputGroups { get; } = [];
 
-    /// <summary>사용자 지정 디지털 출력 점(LED 감시).</summary>
-    public ObservableCollection<CustomDigitalPointViewModel> CustomOutputPoints { get; } = [];
+    /// <summary>사용자 지정 디지털 출력 그룹(LED 감시).</summary>
+    public ObservableCollection<DigitalPointGroupViewModel> OutputGroups { get; } = [];
 
-    /// <summary>사용자 지정 입력 점이 있는지.</summary>
-    public bool HasCustomInputPoints => CustomInputPoints.Count > 0;
+    /// <summary>입력 그룹이 있는지.</summary>
+    public bool HasInputGroups => InputGroups.Count > 0;
 
-    /// <summary>사용자 지정 출력 점이 있는지.</summary>
-    public bool HasCustomOutputPoints => CustomOutputPoints.Count > 0;
+    /// <summary>출력 그룹이 있는지.</summary>
+    public bool HasOutputGroups => OutputGroups.Count > 0;
 
-    /// <summary>코덱이 미검증 초안인지 — 경고 배너 표시용.</summary>
-    public bool IsCodecDraft => CanStartServer && XgtFenetCodec.IsDraft;
+    /// <summary>
+    /// 접속 표시등 상태 — 정지 / 수신 중(미접속) / 접속됨.
+    /// </summary>
+    /// <remarks>
+    /// 마스터가 실제로 붙었는지를 한눈에 보려면 "수신 중"과 "접속됨"을 구분해야 한다.
+    /// 접속됨이면 초록불이 들어온다.
+    /// </remarks>
+    public bool IsClientConnected => Engine.IsServerRunning && Engine.ConnectedClientCount > 0;
 
-    /// <summary>미검증 초안 코덱 경고 문구.</summary>
-    public string CodecDraftWarning => XgtFenetCodec.DraftWarning;
+    /// <summary>수신 중이지만 아직 접속이 없는 상태.</summary>
+    public bool IsListeningWithoutClient => Engine.IsServerRunning && Engine.ConnectedClientCount == 0;
+
+    /// <summary>접속 표시등 옆 문구.</summary>
+    public string ConnectionText => !Engine.IsServerRunning
+        ? "정지"
+        : Engine.ConnectedClientCount > 0
+            ? $"접속 {Engine.ConnectedClientCount}"
+            : "대기 중";
 
     /// <summary>자동 캡처된 프레임 수 안내.</summary>
     public string CaptureSummary => _frameRecorder is null
@@ -284,12 +297,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _newOutputPointLabel = string.Empty;
 
-    /// <summary>디지털 입력 점을 추가한다.</summary>
+    /// <summary>디지털 입력 그룹을 추가한다.</summary>
     [RelayCommand]
     private void AddInputPoint()
         => AddDigitalPoint(NewInputPointAddress, NewInputPointLabel, DigitalPointMode.Input);
 
-    /// <summary>디지털 출력 점을 추가한다.</summary>
+    /// <summary>디지털 출력 그룹을 추가한다.</summary>
     [RelayCommand]
     private void AddOutputPoint()
         => AddDigitalPoint(NewOutputPointAddress, NewOutputPointLabel, DigitalPointMode.Output);
@@ -301,31 +314,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (!DigitalPointEntry.IsValid(address))
         {
-            ErrorMessage = $"비트 주소를 해석할 수 없습니다: '{address}' " +
-                "(비트 주소만 됩니다 — 예: %MX801, %IX600, %QX2000)";
+            ErrorMessage = $"주소를 해석할 수 없습니다: '{address}' " +
+                "(예: %MX801 · %MB40 · %MW320 · %MD422 · %ML50 · %QX2000)";
             return;
         }
 
         var entry = new DigitalPointEntry { Address = address, Label = label.Trim(), Mode = mode };
         var resolved = entry.Resolve(Engine.Io.Addressing);
-        var target = mode == DigitalPointMode.Input ? CustomInputPoints : CustomOutputPoints;
+        var target = mode == DigitalPointMode.Input ? InputGroups : OutputGroups;
 
-        if (target.Any(p => p.Address.Area == resolved.Area && p.Address.Offset == resolved.Offset))
+        if (target.Any(p => p.Address.Area == resolved.Area
+            && p.Address.Size == resolved.Size
+            && p.Address.Offset == resolved.Offset))
         {
             ErrorMessage = $"'{resolved.Text}' 는 이미 목록에 있습니다.";
             return;
         }
 
+        DigitalPointGroupViewModel group;
         try
         {
-            target.Add(new CustomDigitalPointViewModel(
-                Engine.Memory, entry, Engine.Io.Addressing, RemoveDigitalPoint));
+            group = new DigitalPointGroupViewModel(
+                Engine.Memory, entry, Engine.Io.Addressing, RemoveDigitalPoint);
         }
         catch (AddressRangeException ex)
         {
             ErrorMessage = ex.Message;
             return;
         }
+
+        target.Add(group);
 
         if (mode == DigitalPointMode.Input)
         {
@@ -338,24 +356,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
             NewOutputPointLabel = string.Empty;
         }
 
-        OnPropertyChanged(nameof(HasCustomInputPoints));
-        OnPropertyChanged(nameof(HasCustomOutputPoints));
-        StatusMessage = $"디지털 점 추가: {resolved.Text} ({(mode == DigitalPointMode.Input ? "입력" : "출력")})";
+        OnPropertyChanged(nameof(HasInputGroups));
+        OnPropertyChanged(nameof(HasOutputGroups));
+        StatusMessage = group.IsArray
+            ? $"{resolved.Text} 추가 — 비트 {group.BitCount}개로 펼쳤습니다"
+            : $"{resolved.Text} 추가 ({(mode == DigitalPointMode.Input ? "입력" : "출력")})";
     }
 
-    /// <summary>디지털 점을 제거한다(점의 제거 커맨드가 호출한다).</summary>
-    public void RemoveDigitalPoint(CustomDigitalPointViewModel? point)
+    /// <summary>디지털 그룹을 제거한다(그룹의 제거 커맨드가 호출한다).</summary>
+    public void RemoveDigitalPoint(DigitalPointGroupViewModel? group)
     {
-        if (point is null)
+        if (group is null)
         {
             return;
         }
 
-        if (CustomInputPoints.Remove(point) || CustomOutputPoints.Remove(point))
+        if (InputGroups.Remove(group) || OutputGroups.Remove(group))
         {
-            OnPropertyChanged(nameof(HasCustomInputPoints));
-            OnPropertyChanged(nameof(HasCustomOutputPoints));
-            StatusMessage = $"디지털 점 제거: {point.AddressText}";
+            OnPropertyChanged(nameof(HasInputGroups));
+            OnPropertyChanged(nameof(HasOutputGroups));
+            StatusMessage = $"제거: {group.AddressText}";
         }
     }
 
@@ -443,14 +463,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
             watch.Refresh();
         }
 
-        foreach (var point in CustomInputPoints)
+        foreach (var group in InputGroups)
         {
-            point.Refresh();
+            group.Refresh();
         }
 
-        foreach (var point in CustomOutputPoints)
+        foreach (var group in OutputGroups)
         {
-            point.Refresh();
+            group.Refresh();
         }
 
         RefreshTraffic();
@@ -498,9 +518,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        foreach (var point in CustomInputPoints.Where(p => p.IsOn))
+        foreach (var bit in InputGroups.SelectMany(g => g.Bits).Where(b => b.IsOn))
         {
-            initial.Add(new InitialValue { Address = point.AddressText, Value = 1 });
+            initial.Add(new InitialValue { Address = bit.AddressText, Value = 1 });
         }
 
         foreach (var slot in AnalogSlots)
@@ -529,8 +549,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 .Select(vm => AutomationRuleSettings.FromRule(vm.Rule with { IsEnabled = vm.IsEnabled }))
                 .ToArray(),
             Watches = Watches.Select(w => w.ToEntry()).ToArray(),
-            DigitalPoints = CustomInputPoints.Concat(CustomOutputPoints)
-                .Select(p => p.Entry).ToArray(),
+            DigitalPoints = InputGroups.Concat(OutputGroups).Select(g => g.Entry).ToArray(),
         };
     }
 
@@ -606,15 +625,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        CustomInputPoints.Clear();
-        CustomOutputPoints.Clear();
+        InputGroups.Clear();
+        OutputGroups.Clear();
         foreach (var entry in project.DigitalPoints)
         {
             try
             {
-                var vm = new CustomDigitalPointViewModel(
+                var vm = new DigitalPointGroupViewModel(
                     Engine.Memory, entry, project.Io.Addressing, RemoveDigitalPoint);
-                (entry.Mode == DigitalPointMode.Input ? CustomInputPoints : CustomOutputPoints).Add(vm);
+                (entry.Mode == DigitalPointMode.Input ? InputGroups : OutputGroups).Add(vm);
             }
             catch (Exception ex) when (ex is FormatException or AddressRangeException
                 or InvalidOperationException)
@@ -624,8 +643,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasWatches));
-        OnPropertyChanged(nameof(HasCustomInputPoints));
-        OnPropertyChanged(nameof(HasCustomOutputPoints));
+        OnPropertyChanged(nameof(HasInputGroups));
+        OnPropertyChanged(nameof(HasOutputGroups));
         OnPropertyChanged(nameof(RackSummary));
         OnPropertyChanged(nameof(HasAutomationRules));
         OnPropertyChanged(nameof(IsAutomationRunning));
@@ -639,7 +658,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanStartServer));
         OnPropertyChanged(nameof(ServerUnavailableReason));
         OnPropertyChanged(nameof(ShowServerUnavailableNotice));
-        OnPropertyChanged(nameof(IsCodecDraft));
+        OnPropertyChanged(nameof(IsClientConnected));
+        OnPropertyChanged(nameof(IsListeningWithoutClient));
+        OnPropertyChanged(nameof(ConnectionText));
         OnPropertyChanged(nameof(ServerStatusText));
         OnPropertyChanged(nameof(StartStopLabel));
     }

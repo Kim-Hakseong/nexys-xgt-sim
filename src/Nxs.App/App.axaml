@@ -31,6 +31,13 @@
     <SolidColorBrush x:Key="LineBrush" Color="#DDDBD3" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#9C2030" />
 
+    <!-- 접속 표시등 전용 색. DESIGN.md 는 팔레트 외 색을 금지하지만 저장소 소유자가
+         "통신이 붙으면 초록불" 을 명시적으로 요청해 승인된 예외로 도입했다.
+         **접속 상태 표시등에만** 쓰고 데이터 LED(출력 점)는 와인레드 규율을 유지한다.
+         웜 뉴트럴 팔레트와 어울리도록 채도를 낮춘 딥 그린을 골랐다. -->
+    <SolidColorBrush x:Key="ConnectedBrush" Color="#2E7A4B" />
+    <SolidColorBrush x:Key="ConnectedGlowBrush" Color="#8FC7A6" />
+
     <!-- Fluent 리소스 오버라이드 (탭 선택 필, 체크 토글) -->
     <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="Transparent" />
     <SolidColorBrush x:Key="TabItemHeaderForegroundSelected" Color="#FFFFFF" />
@@ -301,6 +308,26 @@
     <Style Selector="Ellipse.led.on">
       <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
       <Setter Property="Stroke" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <!-- 접속 표시등: 정지 = 빈 원 / 수신 중 = 보조텍스트 채움 / 접속됨 = 초록 채움 + 발광 -->
+    <Style Selector="Ellipse.statusLamp">
+      <Setter Property="Width" Value="14" />
+      <Setter Property="Height" Value="14" />
+      <Setter Property="Fill" Value="Transparent" />
+      <Setter Property="Stroke" Value="{StaticResource LineBrush}" />
+      <Setter Property="StrokeThickness" Value="1.5" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Ellipse.statusLamp.listening">
+      <Setter Property="Fill" Value="{StaticResource TextSecondaryBrush}" />
+      <Setter Property="Stroke" Value="{StaticResource TextSecondaryBrush}" />
+    </Style>
+    <Style Selector="Ellipse.statusLamp.connected">
+      <Setter Property="Fill" Value="{StaticResource ConnectedBrush}" />
+      <Setter Property="Stroke" Value="{StaticResource ConnectedGlowBrush}" />
+      <Setter Property="StrokeThickness" Value="3" />
     </Style>
 
     <!-- 접속 상태 필: 연결 = 와인레드 + 흰 글자, 미연결 = 보조텍스트 -->

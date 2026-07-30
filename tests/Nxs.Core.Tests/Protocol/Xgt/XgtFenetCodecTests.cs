@@ -487,8 +487,9 @@ public class XgtFenetCodecTests
     // ==================== 진단 ====================
 
     [Fact]
-    public void CodecReportsItselfAsDraftUntilTheSpecIsVerified()
-        => Assert.True(XgtFenetCodec.IsDraft, "spec 검증이 끝나면 IsDraft 를 false 로 바꾼다");
+    public void CodecIsNoLongerMarkedAsDraftAfterFieldVerification()
+        => Assert.False(XgtFenetCodec.IsDraft,
+            "2026-07-30 실제 LabVIEW 현장 검증 통과 — 남은 미확인 항목은 spec §5 에러 코드 표뿐이다");
 
     [Fact]
     public void SummaryDescribesTheRequestForTheTrafficLog()

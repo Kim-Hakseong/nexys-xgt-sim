@@ -32,8 +32,6 @@ public static class Program
         (1, "02-digital-output"),
         (2, "03-analog-input"),
         (3, "04-watch"),
-        (4, "05-automation"),
-        (6, "07-rack-config"),
     ];
 
     public static int Main(string[] args)
@@ -57,6 +55,29 @@ public static class Program
         window.Show();
         Settle(window);
 
+        // 접속 표시등에 초록불이 들어온 상태를 찍기 위해 실제로 서버를 켜고 마스터를 붙인다.
+        Nxs.TestKit.PlcTestClient? lamp = null;
+        try
+        {
+            viewModel.Engine.ServerSettings = new ServerSettings { BindAddress = "127.0.0.1", Port = 0 };
+            viewModel.Engine.StartServerAsync().GetAwaiter().GetResult();
+            lamp = Nxs.TestKit.PlcTestClient
+                .ConnectAsync("127.0.0.1", viewModel.Engine.LocalEndPoint!.Port)
+                .GetAwaiter().GetResult();
+
+            for (var i = 0; i < 50 && viewModel.Engine.ConnectedClientCount == 0; i++)
+            {
+                Thread.Sleep(20);
+            }
+
+            viewModel.Refresh();
+            Settle(window);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"접속 표시등 준비 실패(계속 진행): {ex.Message}");
+        }
+
         var tabControl = window.GetLogicalDescendants().OfType<TabControl>().First();
 
         foreach (var (index, name) in Tabs)
@@ -76,6 +97,7 @@ public static class Program
             Console.WriteLine($"{name}.png  ({new FileInfo(path).Length / 1024}KB)");
         }
 
+        lamp?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         viewModel.Shutdown();
 
         if (!RenderTrafficLog(outputDirectory))
@@ -138,20 +160,20 @@ public static class Program
         Settle(window);
 
         var tabControl = window.GetLogicalDescendants().OfType<TabControl>().First();
-        tabControl.SelectedIndex = 5;
+        tabControl.SelectedIndex = 4;
         Settle(window);
 
-        var path = Path.Combine(outputDirectory, "06-traffic-log.png");
+        var path = Path.Combine(outputDirectory, "05-traffic-log.png");
         using var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {
-            Console.Error.WriteLine("렌더 실패: 06-traffic-log");
+            Console.Error.WriteLine("렌더 실패: 05-traffic-log");
             viewModel.Shutdown();
             return false;
         }
 
         frame.Save(path);
-        Console.WriteLine($"06-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
+        Console.WriteLine($"05-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
         viewModel.Shutdown();
         return true;
     }
@@ -252,7 +274,7 @@ public static class Program
         // 사용자 지정 디지털 점 — 임의 비트 주소를 양방향으로 확인
         foreach (var (address, label) in new[]
         {
-            ("%MX900", "운전 지령"), ("%MX901", "리셋 요청"), ("%MX902", "비상 정지"),
+            ("%MW320", "운전 지령 워드"), ("%MX901", "리셋 요청"), ("%MB40", "모드 선택"),
         })
         {
             viewModel.NewInputPointAddress = address;
@@ -260,12 +282,18 @@ public static class Program
             viewModel.AddInputPointCommand.Execute(null);
         }
 
-        viewModel.CustomInputPoints[0].IsOn = true;
-        viewModel.CustomInputPoints[2].IsOn = true;
+        // 워드 그룹의 몇 비트를 켜 배열 표시를 보여준다
+        foreach (var i in new[] { 0, 1, 3, 7, 8, 12, 15 })
+        {
+            viewModel.InputGroups[0].Bits[i].IsOn = true;
+        }
+
+        viewModel.InputGroups[0].Bits[0].IsOn = true;
+        viewModel.InputGroups[2].Bits[0].IsOn = true;
 
         foreach (var (address, label) in new[]
         {
-            ("%QX2000", "운전 상태"), ("%QX2001", "경보 출력"), ("%MX950", "인터록"),
+            ("%QW10", "운전 상태 워드"), ("%QX2001", "경보 출력"),
         })
         {
             viewModel.NewOutputPointAddress = address;
@@ -274,8 +302,8 @@ public static class Program
         }
 
         // 마스터가 쓴 상태 모사
-        viewModel.Engine.Memory.WriteBit(IecAddress.Parse("%QX2000"), true);
-        viewModel.Engine.Memory.WriteBit(IecAddress.Parse("%MX950"), true);
+        viewModel.Engine.Memory.WriteScalar(IecAddress.Parse("%QW10"), 0b1000_0001_0010_0101);
+        viewModel.Engine.Memory.WriteBit(IecAddress.Parse("%QX2001"), true);
         viewModel.Refresh();
 
         // 입력 점: 결정적 패턴 (3의 배수 ON)

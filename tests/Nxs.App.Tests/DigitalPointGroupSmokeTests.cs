@@ -10,10 +10,10 @@ using Xunit;
 namespace Nxs.App.Tests;
 
 /// <summary>
-/// 사용자 지정 디지털 점 — 임의 비트 주소를 입력 탭에서 토글하고 출력 탭에서 감시한다.
+/// 사용자 지정 디지털 점 그룹 — 임의 주소를 비트 배열로 펼쳐 입력 탭에서 토글하고 출력 탭에서 감시한다.
 /// 불리언 ON/OFF 를 양방향으로 확인할 수 있어야 한다.
 /// </summary>
-public class CustomDigitalPointSmokeTests
+public class DigitalPointGroupSmokeTests
 {
     private static MainWindowViewModel NewViewModel(NxpProject? project = null)
         => new(
@@ -33,12 +33,14 @@ public class CustomDigitalPointSmokeTests
         vm.NewInputPointLabel = "운전 지령";
         vm.AddInputPointCommand.Execute(null);
 
-        var point = Assert.Single(vm.CustomInputPoints);
-        Assert.Equal("%MX801", point.AddressText);
-        Assert.Equal("운전 지령", point.Label);
-        Assert.True(point.IsWritable);
-        Assert.Equal("OFF", point.StateText);
-        Assert.True(vm.HasCustomInputPoints);
+        var group = Assert.Single(vm.InputGroups);
+        Assert.Equal("%MX801", group.AddressText);
+        Assert.Equal("운전 지령", group.Label);
+        Assert.True(group.IsWritable);
+        Assert.Equal(1, group.BitCount);
+        Assert.False(group.IsArray);
+        Assert.Equal("OFF", group.ValueText);
+        Assert.True(vm.HasInputGroups);
         Assert.Null(vm.ErrorMessage);
 
         vm.Shutdown();
@@ -53,10 +55,10 @@ public class CustomDigitalPointSmokeTests
         vm.NewOutputPointAddress = "%QX2000";
         vm.AddOutputPointCommand.Execute(null);
 
-        var point = Assert.Single(vm.CustomOutputPoints);
-        Assert.False(point.IsWritable);
-        Assert.True(vm.HasCustomOutputPoints);
-        Assert.Empty(vm.CustomInputPoints);
+        var group = Assert.Single(vm.OutputGroups);
+        Assert.False(group.IsWritable);
+        Assert.True(vm.HasOutputGroups);
+        Assert.Empty(vm.InputGroups);
 
         vm.Shutdown();
     }
@@ -68,14 +70,14 @@ public class CustomDigitalPointSmokeTests
         new MainWindow { DataContext = vm }.Show();
         vm.NewInputPointAddress = "%MX801";
         vm.AddInputPointCommand.Execute(null);
-        var point = vm.CustomInputPoints[0];
+        var group = vm.InputGroups[0];
 
-        point.IsOn = true;
+        group.Bits[0].IsOn = true;
 
         Assert.True(vm.Engine.Memory.ReadBit(IecAddress.Parse("%MX801")));
-        Assert.Equal("ON", point.StateText);
+        Assert.Equal("ON", group.ValueText);
 
-        point.IsOn = false;
+        group.Bits[0].IsOn = false;
         Assert.False(vm.Engine.Memory.ReadBit(IecAddress.Parse("%MX801")));
 
         vm.Shutdown();
@@ -89,8 +91,8 @@ public class CustomDigitalPointSmokeTests
         vm.NewOutputPointAddress = "%QX2000";
         vm.AddOutputPointCommand.Execute(null);
 
-        // 감시 전용이므로 IsOn 을 건드려도 메모리에 쓰지 않는다.
-        vm.CustomOutputPoints[0].IsOn = true;
+        // 감시 전용이므로 비트를 건드려도 메모리에 쓰지 않는다.
+        vm.OutputGroups[0].Bits[0].IsOn = true;
 
         Assert.False(vm.Engine.Memory.ReadBit(IecAddress.Parse("%QX2000")));
         vm.Shutdown();
@@ -111,20 +113,20 @@ public class CustomDigitalPointSmokeTests
         vm.Engine.Memory.WriteBit(IecAddress.Parse("%QX2000"), true);
         vm.Refresh();
 
-        Assert.True(vm.CustomInputPoints[0].IsOn);
-        Assert.True(vm.CustomOutputPoints[0].IsOn);
-        Assert.Equal("ON", vm.CustomOutputPoints[0].StateText);
+        Assert.True(vm.InputGroups[0].Bits[0].IsOn);
+        Assert.True(vm.OutputGroups[0].Bits[0].IsOn);
+        Assert.Equal("ON", vm.OutputGroups[0].ValueText);
 
         vm.Shutdown();
     }
 
     [AvaloniaTheory]
-    [InlineData("%MW320")]
-    [InlineData("%MD422")]
-    [InlineData("%ML50")]
-    [InlineData("%ZX1")]
-    [InlineData("")]
-    public void NonBitAddressIsRejected(string address)
+    [InlineData("%MX801", 1)]
+    [InlineData("%MB40", 8)]
+    [InlineData("%MW320", 16)]
+    [InlineData("%MD422", 32)]
+    [InlineData("%ML50", 64)]
+    public void EveryWidthExpandsIntoThatManyBits(string address, int expectedBits)
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
@@ -132,10 +134,101 @@ public class CustomDigitalPointSmokeTests
         vm.NewInputPointAddress = address;
         vm.AddInputPointCommand.Execute(null);
 
-        Assert.Empty(vm.CustomInputPoints);
-        Assert.NotNull(vm.ErrorMessage);
-        Assert.Contains("비트 주소", vm.ErrorMessage!, StringComparison.Ordinal);
+        var group = Assert.Single(vm.InputGroups);
+        Assert.Equal(expectedBits, group.BitCount);
+        Assert.Equal(expectedBits, group.Bits.Count);
+        Assert.Equal(expectedBits > 1, group.IsArray);
+        Assert.Null(vm.ErrorMessage);
 
+        vm.Shutdown();
+    }
+
+    [AvaloniaTheory]
+    [InlineData("%ZX1")]
+    [InlineData("")]
+    [InlineData("MW320")]
+    public void InvalidAddressIsRejected(string address)
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+
+        vm.NewInputPointAddress = address;
+        vm.AddInputPointCommand.Execute(null);
+
+        Assert.Empty(vm.InputGroups);
+        Assert.NotNull(vm.ErrorMessage);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void WordGroupBitsMapOntoTheWordValue()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+        vm.NewInputPointAddress = "%MW320";
+        vm.AddInputPointCommand.Execute(null);
+        var group = vm.InputGroups[0];
+
+        group.Bits[0].IsOn = true;
+        group.Bits[1].IsOn = true;
+        group.Bits[3].IsOn = true;
+
+        Assert.Equal(0b1011u, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW320")));
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void WordWrittenByTheMasterLightsTheMatchingBits()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+        vm.NewOutputPointAddress = "%MW900";
+        vm.AddOutputPointCommand.Execute(null);
+        var group = vm.OutputGroups[0];
+
+        vm.Engine.Memory.WriteScalar(IecAddress.Parse("%MW900"), 0b1000_0001_0000_0101);
+        vm.Refresh();
+
+        Assert.True(group.Bits[0].IsOn);
+        Assert.False(group.Bits[1].IsOn);
+        Assert.True(group.Bits[2].IsOn);
+        Assert.True(group.Bits[8].IsOn);
+        Assert.True(group.Bits[15].IsOn);
+        Assert.Equal("0x8105", group.ValueText);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void SetAllAndClearAllDriveEveryBitOfAnInputGroup()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+        vm.NewInputPointAddress = "%MW320";
+        vm.AddInputPointCommand.Execute(null);
+        var group = vm.InputGroups[0];
+
+        group.SetAllCommand.Execute(null);
+        Assert.Equal(0xFFFFu, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW320")));
+
+        group.ClearAllCommand.Execute(null);
+        Assert.Equal(0u, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW320")));
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void SetAllDoesNothingOnAnOutputGroup()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+        vm.NewOutputPointAddress = "%MW900";
+        vm.AddOutputPointCommand.Execute(null);
+
+        vm.OutputGroups[0].SetAllCommand.Execute(null);
+
+        Assert.Equal(0u, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW900")));
         vm.Shutdown();
     }
 
@@ -150,7 +243,7 @@ public class CustomDigitalPointSmokeTests
         vm.NewInputPointAddress = "%MX801";
         vm.AddInputPointCommand.Execute(null);
 
-        Assert.Single(vm.CustomInputPoints);
+        Assert.Single(vm.InputGroups);
         Assert.Contains("이미 목록에", vm.ErrorMessage!, StringComparison.Ordinal);
 
         vm.Shutdown();
@@ -164,10 +257,10 @@ public class CustomDigitalPointSmokeTests
         vm.NewInputPointAddress = "%MX801";
         vm.AddInputPointCommand.Execute(null);
 
-        vm.CustomInputPoints[0].RemoveCommand.Execute(null);
+        vm.InputGroups[0].RemoveCommand.Execute(null);
 
-        Assert.Empty(vm.CustomInputPoints);
-        Assert.False(vm.HasCustomInputPoints);
+        Assert.Empty(vm.InputGroups);
+        Assert.False(vm.HasInputGroups);
         vm.Shutdown();
     }
 
@@ -187,7 +280,7 @@ public class CustomDigitalPointSmokeTests
             vm.NewOutputPointAddress = "%QX2000";
             vm.NewOutputPointLabel = "운전 상태";
             vm.AddOutputPointCommand.Execute(null);
-            vm.CustomInputPoints[0].IsOn = true;
+            vm.InputGroups[0].Bits[0].IsOn = true;
 
             vm.SaveProject(path);
             Assert.Null(vm.ErrorMessage);
@@ -198,15 +291,15 @@ public class CustomDigitalPointSmokeTests
             reopened.OpenProject(path);
 
             Assert.Null(reopened.ErrorMessage);
-            var input = Assert.Single(reopened.CustomInputPoints);
-            var output = Assert.Single(reopened.CustomOutputPoints);
+            var input = Assert.Single(reopened.InputGroups);
+            var output = Assert.Single(reopened.OutputGroups);
             Assert.Equal("%MX801", input.AddressText);
             Assert.Equal("운전 지령", input.Label);
             Assert.True(input.IsWritable);
             Assert.Equal("%QX2000", output.AddressText);
             Assert.False(output.IsWritable);
             // 켜 둔 상태가 초기값으로 저장되어 복원된다.
-            Assert.True(input.IsOn);
+            Assert.True(input.Bits[0].IsOn);
             reopened.Shutdown();
         }
         finally
@@ -224,16 +317,16 @@ public class CustomDigitalPointSmokeTests
         vm.AddInputPointCommand.Execute(null);
         await vm.ToggleServerCommand.ExecuteAsync(null);
 
-        var point = vm.CustomInputPoints[0];
+        var bit = vm.InputGroups[0].Bits[0];
 
         // 방향 1: UI 토글 → 메모리
-        point.IsOn = true;
-        Assert.True(vm.Engine.Memory.ReadBit(point.Address));
+        bit.IsOn = true;
+        Assert.True(vm.Engine.Memory.ReadBit(bit.Address));
 
         // 방향 2: 외부(마스터) 쓰기 → UI
-        vm.Engine.Memory.WriteBit(point.Address, false);
+        vm.Engine.Memory.WriteBit(bit.Address, false);
         vm.Refresh();
-        Assert.False(point.IsOn);
+        Assert.False(bit.IsOn);
 
         vm.Shutdown();
     }

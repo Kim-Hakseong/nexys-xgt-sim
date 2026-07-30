@@ -397,9 +397,6 @@ public class WatchListSmokeTests
 
         Assert.True(vm.CanStartServer);
         Assert.False(vm.ShowServerUnavailableNotice);
-        // 초안 상태이므로 미검증 경고가 대신 떠야 한다.
-        Assert.True(vm.IsCodecDraft);
-        Assert.Contains("spec/xgt-fenet-reference.md", vm.CodecDraftWarning, StringComparison.Ordinal);
 
         vm.Shutdown();
     }

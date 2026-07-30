@@ -45,11 +45,18 @@
                      IsEnabled="{Binding !IsServerRunning}" />
           </StackPanel>
 
-          <Border Classes="pill connected" IsVisible="{Binding IsServerRunning}" VerticalAlignment="Bottom">
-            <TextBlock Text="{Binding ServerStatusText}" FontSize="12" />
-          </Border>
-          <Border Classes="pill disconnected" IsVisible="{Binding !IsServerRunning}" VerticalAlignment="Bottom">
-            <TextBlock Text="{Binding ServerStatusText}" FontSize="12" />
+          <!-- 접속 표시등 — 마스터가 붙으면 초록불이 들어온다 -->
+          <Border Classes="pill" VerticalAlignment="Bottom" Padding="12,6"
+                  ToolTip.Tip="{Binding ServerStatusText}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Grid Width="16" Height="16" VerticalAlignment="Center">
+                <Ellipse Classes="statusLamp" />
+                <Ellipse Classes="statusLamp listening" IsVisible="{Binding IsListeningWithoutClient}" />
+                <Ellipse Classes="statusLamp connected" IsVisible="{Binding IsClientConnected}" />
+              </Grid>
+              <TextBlock Classes="mono" Text="{Binding ConnectionText}" FontSize="12"
+                         VerticalAlignment="Center" />
+            </StackPanel>
           </Border>
 
           <Button Classes="accent" Content="{Binding StartStopLabel}" Width="76"
@@ -68,200 +75,181 @@
           <TextBlock Text="{Binding ServerUnavailableReason}" TextWrapping="Wrap" FontSize="12" />
         </StackPanel>
       </Border>
-
-      <Border Classes="notice" Margin="0,0,0,12" IsVisible="{Binding IsCodecDraft}">
-        <StackPanel Spacing="4">
-          <TextBlock Text="미검증 초안 코덱으로 동작 중입니다" FontWeight="SemiBold" FontSize="13" />
-          <TextBlock Text="{Binding CodecDraftWarning}" TextWrapping="Wrap" FontSize="12" />
-          <TextBlock Classes="muted mono" Text="{Binding CaptureSummary}" FontSize="11" />
-        </StackPanel>
-      </Border>
     </StackPanel>
 
     <!-- 랙 패널 -->
     <TabControl Grid.Row="2">
 
-      <!-- 디지털 입력: 사용자가 토글 → 마스터가 읽는다 -->
+      <!-- 디지털 입력: 사용자가 지정한 주소를 토글 → 마스터가 읽는다 -->
       <TabItem Header="디지털 입력">
-        <ScrollViewer>
-          <StackPanel>
-
-            <!-- 임의 비트 주소 추가 -->
-            <Border Classes="card" Padding="16" Margin="0,0,0,12">
-              <StackPanel Spacing="8">
-                <TextBlock Classes="sectionTitle" Text="입력 점 주소 추가" />
-                <TextBlock Classes="muted" TextWrapping="Wrap"
-                           Text="랙 매핑에 없는 비트도 토글할 수 있다. 토글하면 즉시 메모리에 반영되어 마스터가 읽는다. 예: %MX801 · %IX600 · %MX1024" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <StackPanel Spacing="2">
-                    <TextBlock Classes="fieldLabel" Text="비트 주소" />
-                    <TextBox Classes="mono" Width="150" Text="{Binding NewInputPointAddress}"
-                             Watermark="%MX801" />
-                  </StackPanel>
-                  <StackPanel Spacing="2">
-                    <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
-                    <TextBox Width="220" Text="{Binding NewInputPointLabel}" Watermark="운전 지령" />
-                  </StackPanel>
-                  <Button Classes="accent" Content="추가" Command="{Binding AddInputPointCommand}"
-                          VerticalAlignment="Bottom" />
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Border Grid.Row="0" Classes="card" Padding="16" Margin="0,0,0,12">
+            <StackPanel Spacing="8">
+              <TextBlock Classes="sectionTitle" Text="입력 점 주소 추가" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="토글하면 즉시 메모리에 반영되어 마스터가 읽는다. 비트뿐 아니라 바이트·워드·더블워드 주소도 되고, 그 경우 폭만큼 비트 배열로 펼쳐진다.&#10;%MX801(1개) · %MB40(8개) · %MW320(16개) · %MD422(32개) · %ML50(64개)" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="주소" />
+                  <TextBox Classes="mono" Width="160" Text="{Binding NewInputPointAddress}"
+                           Watermark="%MW320" />
                 </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
+                  <TextBox Width="240" Text="{Binding NewInputPointLabel}" Watermark="운전 지령 워드" />
+                </StackPanel>
+                <Button Classes="accent" Content="추가" Command="{Binding AddInputPointCommand}"
+                        VerticalAlignment="Bottom" />
               </StackPanel>
-            </Border>
+            </StackPanel>
+          </Border>
 
-            <!-- 사용자 지정 입력 점 -->
-            <Border Classes="card" Padding="18" Margin="0,0,0,12"
-                    IsVisible="{Binding HasCustomInputPoints}">
-              <StackPanel Spacing="12">
-                <TextBlock Classes="sectionTitle" Text="사용자 지정 입력 점" />
-                <ItemsControl ItemsSource="{Binding CustomInputPoints}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:CustomDigitalPointViewModel">
-                      <Border Classes="softCard" Padding="12" Margin="0,0,0,8">
-                        <Grid ColumnDefinitions="130,*,84,Auto">
-                          <TextBlock Grid.Column="0" Classes="mono" Text="{Binding AddressText}"
-                                     FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
-                          <TextBlock Grid.Column="1" Classes="muted" Text="{Binding Label}"
-                                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                          <ToggleButton Grid.Column="2" Classes="mono" Width="72"
-                                        Content="{Binding StateText}" IsChecked="{Binding IsOn}"
-                                        Margin="0,0,10,0" HorizontalContentAlignment="Center" />
-                          <Button Grid.Column="3" ToolTip.Tip="이 점 제거"
-                                  Command="{Binding RemoveCommand}" VerticalAlignment="Center">
-                            <PathIcon Data="{StaticResource IconRemove}" />
-                          </Button>
-                        </Grid>
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </StackPanel>
-            </Border>
+          <Border Grid.Row="1" Classes="softCard" Padding="14" Margin="0,0,0,12"
+                  IsVisible="{Binding !HasInputGroups}">
+            <TextBlock Classes="muted" TextWrapping="Wrap"
+                       Text="아직 입력 점이 없습니다. 위에 주소를 넣어 추가하면 토글할 수 있고, [프로젝트 저장] 하면 목록이 .nxp 에 함께 저장됩니다." />
+          </Border>
 
-            <ItemsControl ItemsSource="{Binding InputSlots}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="vm:SlotViewModel">
-                <Border Classes="card" Padding="18" Margin="0,0,0,12">
-                  <StackPanel Spacing="12">
-                    <StackPanel Spacing="2">
-                      <TextBlock Classes="sectionTitle" Text="{Binding Title}" />
-                      <TextBlock Classes="muted mono" Text="{Binding Subtitle}" />
+          <ScrollViewer Grid.Row="2" IsVisible="{Binding HasInputGroups}">
+            <ItemsControl ItemsSource="{Binding InputGroups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:DigitalPointGroupViewModel">
+                  <Border Classes="card" Padding="18" Margin="0,0,0,12">
+                    <StackPanel Spacing="12">
+                      <Grid ColumnDefinitions="*,Auto,Auto">
+                        <StackPanel Grid.Column="0" Spacing="2">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="mono" Text="{Binding AddressText}"
+                                       FontWeight="SemiBold" FontSize="15" />
+                            <Border Classes="pill" Padding="7,3" VerticalAlignment="Center">
+                              <TextBlock Classes="mono" Text="{Binding SizeText}" FontSize="10" />
+                            </Border>
+                            <TextBlock Classes="mono" Text="{Binding ValueText}"
+                                       VerticalAlignment="Center" FontSize="12" />
+                            <TextBlock Classes="muted" Text="{Binding Label}"
+                                       VerticalAlignment="Center" />
+                          </StackPanel>
+                          <TextBlock Classes="muted mono" Text="{Binding Subtitle}" FontSize="11" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                    Margin="0,0,10,0" VerticalAlignment="Center"
+                                    IsVisible="{Binding IsArray}">
+                          <Button Content="전체 ON" Command="{Binding SetAllCommand}" FontSize="12" />
+                          <Button Content="전체 OFF" Command="{Binding ClearAllCommand}" FontSize="12" />
+                        </StackPanel>
+                        <Button Grid.Column="2" ToolTip.Tip="이 항목 제거"
+                                Command="{Binding RemoveCommand}" VerticalAlignment="Center">
+                          <PathIcon Data="{StaticResource IconRemove}" />
+                        </Button>
+                      </Grid>
+
+                      <ItemsControl ItemsSource="{Binding Bits}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:DigitalPointViewModel">
+                            <ToggleButton Classes="point mono" Margin="0,0,6,6"
+                                          Content="{Binding PointLabel}"
+                                          IsChecked="{Binding IsOn}"
+                                          ToolTip.Tip="{Binding AddressText}" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
                     </StackPanel>
-                    <ItemsControl ItemsSource="{Binding Points}">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <WrapPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:DigitalPointViewModel">
-                          <ToggleButton Classes="point mono" Margin="0,0,6,6"
-                                        Content="{Binding PointLabel}"
-                                        IsChecked="{Binding IsOn}"
-                                        ToolTip.Tip="{Binding AddressText}" />
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
             </ItemsControl>
-          </StackPanel>
-        </ScrollViewer>
+          </ScrollViewer>
+        </Grid>
       </TabItem>
 
       <!-- 디지털 출력: 마스터가 쓴 값을 LED로 표시 -->
       <TabItem Header="디지털 출력">
-        <ScrollViewer>
-          <StackPanel>
-
-            <!-- 임의 비트 주소 추가 (감시) -->
-            <Border Classes="card" Padding="16" Margin="0,0,0,12">
-              <StackPanel Spacing="8">
-                <TextBlock Classes="sectionTitle" Text="출력 점 주소 추가" />
-                <TextBlock Classes="muted" TextWrapping="Wrap"
-                           Text="마스터가 쓰는 비트를 감시한다. 사용자 조작은 되지 않고 값 변화만 LED 로 표시한다. 예: %QX2000 · %MX900" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <StackPanel Spacing="2">
-                    <TextBlock Classes="fieldLabel" Text="비트 주소" />
-                    <TextBox Classes="mono" Width="150" Text="{Binding NewOutputPointAddress}"
-                             Watermark="%QX2000" />
-                  </StackPanel>
-                  <StackPanel Spacing="2">
-                    <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
-                    <TextBox Width="220" Text="{Binding NewOutputPointLabel}" Watermark="운전 상태" />
-                  </StackPanel>
-                  <Button Classes="accent" Content="추가" Command="{Binding AddOutputPointCommand}"
-                          VerticalAlignment="Bottom" />
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Border Grid.Row="0" Classes="card" Padding="16" Margin="0,0,0,12">
+            <StackPanel Spacing="8">
+              <TextBlock Classes="sectionTitle" Text="출력 점 주소 추가" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="마스터가 쓰는 값을 감시한다. 사용자 조작은 되지 않고 변화만 LED 로 표시한다. 워드 주소를 넣으면 16비트가 배열로 펼쳐진다.&#10;%QX2000 · %QW10 · %MW900 · %MD500" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="주소" />
+                  <TextBox Classes="mono" Width="160" Text="{Binding NewOutputPointAddress}"
+                           Watermark="%QW10" />
                 </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
+                  <TextBox Width="240" Text="{Binding NewOutputPointLabel}" Watermark="운전 상태 워드" />
+                </StackPanel>
+                <Button Classes="accent" Content="추가" Command="{Binding AddOutputPointCommand}"
+                        VerticalAlignment="Bottom" />
               </StackPanel>
-            </Border>
+            </StackPanel>
+          </Border>
 
-            <!-- 사용자 지정 출력 점 -->
-            <Border Classes="card" Padding="18" Margin="0,0,0,12"
-                    IsVisible="{Binding HasCustomOutputPoints}">
-              <StackPanel Spacing="12">
-                <TextBlock Classes="sectionTitle" Text="사용자 지정 출력 점" />
-                <ItemsControl ItemsSource="{Binding CustomOutputPoints}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:CustomDigitalPointViewModel">
-                      <Border Classes="softCard" Padding="12" Margin="0,0,0,8">
-                        <Grid ColumnDefinitions="130,*,Auto,56,Auto">
-                          <TextBlock Grid.Column="0" Classes="mono" Text="{Binding AddressText}"
-                                     FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
-                          <TextBlock Grid.Column="1" Classes="muted" Text="{Binding Label}"
-                                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                          <Ellipse Grid.Column="2" Classes="led" Classes.on="{Binding IsOn}"
-                                   Margin="0,0,10,0" VerticalAlignment="Center" />
-                          <TextBlock Grid.Column="3" Classes="mono" Text="{Binding StateText}"
-                                     VerticalAlignment="Center" Margin="0,0,10,0" />
-                          <Button Grid.Column="4" ToolTip.Tip="이 점 제거"
-                                  Command="{Binding RemoveCommand}" VerticalAlignment="Center">
-                            <PathIcon Data="{StaticResource IconRemove}" />
-                          </Button>
-                        </Grid>
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </StackPanel>
-            </Border>
+          <Border Grid.Row="1" Classes="softCard" Padding="14" Margin="0,0,0,12"
+                  IsVisible="{Binding !HasOutputGroups}">
+            <TextBlock Classes="muted" TextWrapping="Wrap"
+                       Text="아직 출력 점이 없습니다. 위에 마스터가 쓰는 주소를 넣으면 값 변화를 LED 로 볼 수 있습니다." />
+          </Border>
 
-            <ItemsControl ItemsSource="{Binding OutputSlots}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="vm:SlotViewModel">
-                <Border Classes="card" Padding="18" Margin="0,0,0,12">
-                  <StackPanel Spacing="12">
-                    <StackPanel Spacing="2">
-                      <TextBlock Classes="sectionTitle" Text="{Binding Title}" />
-                      <TextBlock Classes="muted mono" Text="{Binding Subtitle}" />
+          <ScrollViewer Grid.Row="2" IsVisible="{Binding HasOutputGroups}">
+            <ItemsControl ItemsSource="{Binding OutputGroups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:DigitalPointGroupViewModel">
+                  <Border Classes="card" Padding="18" Margin="0,0,0,12">
+                    <StackPanel Spacing="12">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="2">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="mono" Text="{Binding AddressText}"
+                                       FontWeight="SemiBold" FontSize="15" />
+                            <Border Classes="pill" Padding="7,3" VerticalAlignment="Center">
+                              <TextBlock Classes="mono" Text="{Binding SizeText}" FontSize="10" />
+                            </Border>
+                            <TextBlock Classes="mono" Text="{Binding ValueText}"
+                                       VerticalAlignment="Center" FontSize="12" />
+                            <TextBlock Classes="muted" Text="{Binding Label}"
+                                       VerticalAlignment="Center" />
+                          </StackPanel>
+                          <TextBlock Classes="muted mono" Text="{Binding Subtitle}" FontSize="11" />
+                        </StackPanel>
+                        <Button Grid.Column="1" ToolTip.Tip="이 항목 제거"
+                                Command="{Binding RemoveCommand}" VerticalAlignment="Center">
+                          <PathIcon Data="{StaticResource IconRemove}" />
+                        </Button>
+                      </Grid>
+
+                      <ItemsControl ItemsSource="{Binding Bits}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:DigitalPointViewModel">
+                            <Border Classes="softCard" Width="52" Padding="0,8" Margin="0,0,6,6">
+                              <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                <Ellipse Classes="led" Classes.on="{Binding IsOn}"
+                                         ToolTip.Tip="{Binding AddressText}" />
+                                <TextBlock Classes="mono" Text="{Binding PointLabel}"
+                                           HorizontalAlignment="Center" FontSize="11" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
                     </StackPanel>
-                    <ItemsControl ItemsSource="{Binding Points}">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <WrapPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:DigitalPointViewModel">
-                          <Border Classes="softCard" Width="52" Padding="0,8" Margin="0,0,6,6">
-                            <StackPanel Spacing="4" HorizontalAlignment="Center">
-                              <Ellipse Classes="led" Classes.on="{Binding IsOn}"
-                                       ToolTip.Tip="{Binding AddressText}" />
-                              <TextBlock Classes="mono" Text="{Binding PointLabel}"
-                                         HorizontalAlignment="Center" FontSize="11" />
-                            </StackPanel>
-                          </Border>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
             </ItemsControl>
-          </StackPanel>
-        </ScrollViewer>
+          </ScrollViewer>
+        </Grid>
       </TabItem>
 
       <!-- A/D 입력: 공학단위 또는 raw 입력 -->
@@ -388,55 +376,6 @@
         </Grid>
       </TabItem>
 
-      <!-- 값 자동화 -->
-      <TabItem Header="값 자동화">
-        <Grid RowDefinitions="Auto,*">
-          <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,12">
-            <Button Classes="accent" Content="{Binding AutomationToggleLabel}"
-                    Command="{Binding ToggleAutomationCommand}" />
-            <Border Classes="pill" VerticalAlignment="Center">
-              <TextBlock FontSize="12" Text="{Binding AutomationRules.Count, StringFormat='룰 {0}개'}" />
-            </Border>
-          </StackPanel>
-
-          <Border Grid.Row="1" Classes="card" Padding="18" IsVisible="{Binding !HasAutomationRules}">
-            <StackPanel Spacing="6">
-              <TextBlock Classes="sectionTitle" Text="자동화 룰이 없습니다" />
-              <TextBlock Classes="muted" TextWrapping="Wrap"
-                         Text="프로젝트 파일(.nxp)의 automationRules 절에 룰을 추가하면 여기에 표시됩니다. 제너레이터: 고정 / 증가 / 램프 / 사인 / 랜덤 / 토글." />
-            </StackPanel>
-          </Border>
-
-          <ScrollViewer Grid.Row="1" IsVisible="{Binding HasAutomationRules}">
-            <ItemsControl ItemsSource="{Binding AutomationRules}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="vm:AutomationRuleViewModel">
-                  <Border Classes="card" Padding="16" Margin="0,0,0,8">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                      <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" Margin="0,0,12,0"
-                                VerticalAlignment="Center" />
-                      <StackPanel Grid.Column="1" Spacing="3">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                          <TextBlock Classes="mono" Text="{Binding AddressText}" FontWeight="SemiBold"
-                                     FontSize="13" />
-                          <TextBlock Text="{Binding KindText}" FontSize="13" />
-                          <TextBlock Classes="muted mono" Text="{Binding PeriodText}" />
-                        </StackPanel>
-                        <TextBlock Classes="muted mono" Text="{Binding ScaleText}" />
-                      </StackPanel>
-                      <StackPanel Grid.Column="2" Spacing="2" HorizontalAlignment="Right">
-                        <TextBlock Classes="fieldLabel" Text="tick 0..7" />
-                        <TextBlock Classes="mono" Text="{Binding PreviewText}" />
-                      </StackPanel>
-                    </Grid>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-        </Grid>
-      </TabItem>
-
       <!-- 트래픽 로그 -->
       <TabItem Header="트래픽 로그">
         <Grid RowDefinitions="Auto,*">
@@ -469,23 +408,6 @@
         </Grid>
       </TabItem>
 
-      <!-- 랙 구성 개요 -->
-      <TabItem Header="랙 구성">
-        <ScrollViewer>
-          <ItemsControl ItemsSource="{Binding Slots}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="vm:SlotViewModel">
-                <Border Classes="softCard" Padding="14" Margin="0,0,0,8">
-                  <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" />
-                    <TextBlock Classes="muted mono" Text="{Binding Subtitle}" />
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
-      </TabItem>
     </TabControl>
 
     <!-- 하단 상태 라인 + 로고/저작권 (원본 nexys-modbus-workbench 푸터 이식) -->

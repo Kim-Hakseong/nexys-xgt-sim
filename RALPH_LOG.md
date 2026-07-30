@@ -410,3 +410,39 @@ Tests 375/375 (Core 223 + Integration 61 + App 91) · 빌드 경고0/에러0
 [검증] Float 3.14159274 ↔ IEEE754 0x40490FDB 를 4가지 순서 전부로 왕복, Double 전정밀도 왕복,
   LabVIEW 가 %MD500 에 쓴 실수를 워치가 해석하는 e2e, 커스텀 비트 양방향 e2e 를 테스트로 고정.
 Next: —
+
+## M12 — 디지털 탭 사용자 정의 전환 + 비트 배열 + 접속 표시등 (사용자 지시) · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Configuration/DigitalPointEntry.cs, src/Nxs.Core/Protocol/Xgt/XgtFenetCodec.cs(IsDraft=false),
+  src/Nxs.App/ViewModels/{DigitalPointGroupViewModel,MainWindowViewModel}.cs (CustomDigitalPointViewModel 삭제),
+  src/Nxs.App/{App.axaml,Views/MainWindow.axaml}, DESIGN.md(색 예외 기록),
+  tests/Nxs.Core.Tests/Configuration/DigitalPointEntryTests.cs,
+  tests/Nxs.App.Tests/{DigitalPointGroupSmokeTests,TabRenderTests,WatchListSmokeTests}.cs
+Tests 410/410 (Core 250 + Integration 61 + App 99) · 빌드 경고0/에러0
+
+[결정] 디지털 탭에서 **랙 슬롯 고정 표시를 제거**하고 사용자 정의만 남겼다. 랙 매핑은 spec 미확정
+  가정값(슬롯 256점)에 의존하는데, 사용자가 직접 주소를 넣는 방식이 더 확실하고 실사용에 맞다.
+  InputSlots/OutputSlots 컬렉션은 VM 에 남아 있으나(AD 탭이 AnalogSlots 를 쓰므로 구조 유지) UI 에 바인딩하지 않는다.
+[결정] **비트 전용 제한 해제 → 폭만큼 비트 배열로 펼친다.** %MX=1 · %MB=8 · %MW=16 · %MD=32 · %ML=64.
+  비트 0 이 시작 바이트의 최하위 비트다 — 리틀엔디안 저장과 일치하며 M1 골든 벡터(%MW0 비트0 = %MX0)를 따른다.
+  DigitalPointEntry.BitAddressOf 가 절대 비트 주소를 만들고, 그룹 VM 이 기존 DigitalPointViewModel 을 비트마다 재사용한다.
+  워드 그룹에 전체 ON/OFF 버튼을 넣었다(16·32비트를 하나씩 누르는 건 비현실적).
+  그룹 헤더에 현재 값을 16진으로 표시 — 비트 배치와 값을 동시에 확인할 수 있다.
+[결정] '값 자동화'·'랙 구성' 탭 제거(사용자 요청). **자동화 코어는 남겼다** — .nxp 로 정의하고
+  AutomationEngine·테스트가 그대로 살아 있으나 UI 시작 버튼이 없어 지금은 기동할 수 없다.
+  탭을 되살리면 즉시 복구된다(제거는 XAML 한 블록).
+[결정] '미검증 초안 코덱' 배너 제거 + XgtFenetCodec.IsDraft = false.
+  근거: 사용자가 실제 LabVIEW 로 현장 검증을 수행해 접속·읽기·쓰기 정상을 확인했다(spec §8 절차 C).
+  **다만 spec §5 에러 상태 코드 표는 여전히 미확인**이다 — 거절 응답의 코드 값이라 정상 경로 검증으로는
+  확인되지 않는다. 이 사실을 코드 주석·spec·README 에 남겼고 ErrorCodeMap 으로 교정 가능하다.
+  UI 경고만 내리고 기록은 유지한 것이다(사용자는 배너 제거를 요청했고, 사실 기록은 지우지 않았다).
+[결정] **접속 표시등에 초록불** — DESIGN.md 가 팔레트 외 색을 금지하지만("녹색 LED 등") 사용자가
+  명시적으로 요청했다. 3단계로 만들었다: 정지=빈 원 / 수신 중=보조텍스트 채움 / 접속됨=초록(#2E7A4B)+발광.
+  와인레드 단일 액센트로는 "수신 중"과 "접속됨"을 구분할 수 없어 실제로 정보가 부족했다.
+  **적용 범위를 Ellipse.statusLamp 로 한정**하고 데이터 LED(출력 점)는 와인레드 규율을 유지했다.
+  DESIGN.md §"시뮬레이터 고유 요소의 색 규칙"에 승인된 예외로 기록했다(골든 벡터 절은 건드리지 않음).
+  기존 팔레트 대조 테스트(OutputLedUsesOnlyAccentAndLineBrush…)는 그대로 통과한다 — 데이터 LED 는 안 건드렸다.
+[검증] %MW320=0x95EB → 켜진 비트 00,01,03,05,06,07,08,10,12,15 가 화면과 정확히 일치(스크린샷 대조).
+  %QW10=0x8125 출력 LED 도 동일 확인. 탭 5개만 남았는지·초안 배너가 사라졌는지 렌더 테스트로 고정.
+  스크린샷 생성 시 실제로 서버를 켜고 클라이언트를 붙여 초록불이 들어온 상태를 찍었다.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)
