@@ -58,9 +58,14 @@ nc -l 2004 > fixtures/labview-capture/req_read.bin
 
 ### Windows — 실행 파일 다운로드
 
-[**최신 릴리즈에서 `Nxs.App.exe` 받기**](../../releases/latest)
+[**릴리즈 페이지에서 `Nxs.App.exe` 받기**](../../releases) — 맨 위가 최신이다
 
-단일 파일 self-contained 빌드다. **.NET 런타임 설치가 필요 없다.** 받아서 더블클릭하면 된다.
+단일 파일 self-contained 빌드다(약 97 MB). **.NET 런타임 설치가 필요 없다.** 받아서 더블클릭하면 된다.
+
+- SmartScreen 경고가 뜨면 `추가 정보` → `실행` (코드 서명 인증서 없음)
+- 릴리즈 페이지의 `SHA256SUMS.txt` 로 무결성을 확인할 수 있다
+- ⚠️ 현재 빌드는 **macOS 에서 크로스 컴파일**되었고 Windows 실제 기동은 검증되지 않았다.
+  첫 실행 시 [`SMOKE_CHECKLIST.md`](SMOKE_CHECKLIST.md) 0~2장으로 확인해 주기 바란다
 
 ### 소스에서 실행 (Windows / macOS / Linux)
 

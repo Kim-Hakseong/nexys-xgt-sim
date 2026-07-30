@@ -297,3 +297,40 @@ Next: —
 프로토콜 중립 요청 실행기 + 정확한 거절 / 멀티클라이언트 TCP 서버(연결 격리·정지/재시작) /
 I/O 구성 자동 매핑 + .nxp 라운드트립 / Avalonia 랙 패널(비주얼 이식 대조 테스트 통과) /
 값 자동화 6종(골든 벡터 통과·tick 순수 함수) / 트래픽 로그(링 버퍼·오류 필터·파일 저장) / 캡처 재생 하네스.
+
+---
+
+## M9 — 공개 저장소 + 릴리즈 배포 (사용자 추가 요청) · 2026-07-30
+Status ✅
+Files: .gitignore, README.md(스크린샷·사용법 체크리스트 재작성), fixtures/labview-capture/.gitkeep,
+  tools/Nxs.DocShots/{Nxs.DocShots.csproj,Program.cs}, docs/screenshots/*.png(6장),
+  src/Nxs.App/App.axaml(비활성 버튼 스타일), src/Nxs.App/Views/MainWindow.axaml(DataGrid 열 폭),
+  tests/Nxs.App.Tests/VisualTokenTests.cs(비활성 버튼 회귀 2건)
+Tests 239/239 (Core 145 + Integration 47 + App 47) · 빌드 경고0/에러0
+산출물: https://github.com/Kim-Hakseong/nexys-xgt-sim (PUBLIC)
+       릴리즈 v0.1.0-preview — Nxs.App.exe (win-x64 단일 파일 88MB) + SHA256SUMS.txt
+
+[결정] 스크린샷을 헤드리스 Skia 렌더러로 생성하는 도구(tools/Nxs.DocShots)를 만들었다.
+  화면 캡처 방식은 재현 불가·창 포커스 의존이라 문서가 코드와 어긋나기 쉽다. 이제 `dotnet run` 한 줄로 재생성된다.
+[결정] 랙 패널 스크린샷은 **코덱을 주입하지 않은 운영과 동일한 상태**로 찍었다(⛔ 배너 그대로 노출).
+  서버가 켜진 화면을 찍으면 배포본이 할 수 없는 일을 할 수 있는 것처럼 오인시킨다.
+[결정] 트래픽 로그 탭만 예외적으로 합성 코덱으로 실제 왕복을 발생시켜 찍고,
+  README 캡션에 "표시된 hex 는 합성 포맷이며 XGT 프레임이 아니다"를 명시했다. 빈 로그 화면은 기능을 전달하지 못한다.
+[버그 수정] ⛔ 게이트로 잠긴 [시작] 버튼이 **활성처럼 보였다** — Fluent 기본이 accent 배경을 비활성에서도 유지한다.
+  스크린샷을 눈으로 검토하다 발견했다. 기존 토큰(CardSoft/Line/TextSecondary)만으로 비활성 상태를 정의하고
+  회귀 테스트 2건(DisabledAccentButtonDoesNotLookClickable · StartButtonIsDisabledWhenTheCodecGateIsClosed)으로 고정.
+  누를 수 없는 버튼이 눌릴 것처럼 보이면 사용자가 원인 모르고 계속 누르게 된다.
+[수정] 트래픽 로그 DataGrid 의 시각·방향·사유 열이 잘려 "RangeExceede", "방" 으로 보였다 → 폭 조정(118/74/152).
+[결정] 릴리즈는 **prerelease** 로 표시했다. FEnet 코덱이 없어 주 기능(LabVIEW 접속)을 수행할 수 없는 빌드를
+  정식 릴리즈로 내면 받는 사람을 오인시킨다. 릴리즈 노트 첫 절이 "이 빌드는 LabVIEW 접속을 받을 수 없다"로 시작한다.
+[결정] prerelease 라서 GitHub 의 `releases/latest` 가 이 릴리즈를 가리키지 않는다(실측 확인 — /releases 로 리다이렉트).
+  README 링크를 `../../releases` 로 바꿔 항상 유효하고 다음 릴리즈에도 낡지 않게 했다.
+[결정] exe 는 저장소에 커밋하지 않고 릴리즈 자산으로만 배포한다(.gitignore 에 *.exe). CLAUDE.md §5 의
+  "확인 후 삭제" 취지를 지키면서 배포 요구를 충족한다 — 로컬 publish 산출물은 업로드 후 삭제했다.
+[검증] 릴리즈 자산 다운로드를 실측했다: HTTP 200, 선두 2바이트 `4D 5A`(MZ) — 실제 PE 실행 파일임을 확인.
+  README 스크린샷 6장 raw URL 도 전부 200 확인.
+[미검증] **Windows 실제 기동은 여전히 확인하지 못했다** (빌드 호스트가 macOS).
+  `file` 판정과 MZ 시그니처까지만 확인. 릴리즈 노트와 README 양쪽에 이 한계를 명시했다.
+[미정] CONTEXT.md·README_KIT.md 는 사내 맥락(부서명·내부 작업 절차)을 담고 있으나 사용자 지시대로 공개했다.
+  스크럽이 필요하면 히스토리 재작성이 필요하다(현재 커밋 1개라 비용은 낮다).
+Next: — (사용자 요청 완료)
