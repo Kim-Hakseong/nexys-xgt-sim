@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.1.4" />
+    <PackageReference Include="Avalonia.Skia" Version="11.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nxs.App\Nxs.App.csproj" />
+    <!-- 트래픽 로그 스크린샷용 합성 코덱. XGT 가 아님을 README 캡션에 명시한다. -->
+    <ProjectReference Include="..\..\tests\Nxs.TestKit\Nxs.TestKit.csproj" />
+  </ItemGroup>
+
+</Project>

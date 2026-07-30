@@ -1,0 +1,11 @@
+# LabVIEW 캡처 픽스처를 여기에 넣는다.
+#
+# 규약:
+#   <이름>.bin       캡처된 요청 바이트 (더미 TCP 리스너로 받은 것)
+#   <이름>.expected  기대 응답 바이트 (사람이 XGT 매뉴얼과 대조해 확정)
+#
+# .bin 을 넣으면 회귀 스위트가 자동으로 편입한다 (tests/Nxs.Integration.Tests/LabViewCaptureRegressionTests.cs).
+# 캡처 절차는 README.md "게이트를 푸는 방법 B" 와 LABVIEW_CHECKLIST.md 0장 참조.
+#
+# ⚠️ .expected 에 시뮬레이터 출력을 그대로 복사하지 말 것 —
+#    회귀가 자기 자신을 검증하는 셈이 되어 아무것도 잡지 못한다.

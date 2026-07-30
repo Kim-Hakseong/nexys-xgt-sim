@@ -1,0 +1,35 @@
+## .NET 빌드 산출물
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+*.user
+*.suo
+project.lock.json
+project.assets.json
+
+## 테스트/커버리지
+[Tt]est[Rr]esult*/
+coverage*.xml
+coverage*.json
+*.coverage
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+
+## OS
+.DS_Store
+Thumbs.db
+
+## 배포 산출물 (릴리즈 자산으로만 배포 — 저장소에 커밋하지 않는다)
+*.exe
+*.msi
+*.zip
+
+## 사용자 프로젝트 파일 (예시는 docs/ 에 둔다)
+*.nxp
+!docs/**/*.nxp

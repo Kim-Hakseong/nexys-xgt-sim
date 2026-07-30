@@ -1,0 +1,299 @@
+# RALPH_LOG.md — Build history
+Ralph appends one entry per milestone. Do not edit past entries.
+---
+
+## M0 — 스캐폴드 · 2026-07-30
+Status ✅
+Files: NexysXgtSimulator.sln, src/Nxs.Core/Nxs.Core.csproj, tests/Nxs.Core.Tests/{Nxs.Core.Tests.csproj,GlobalUsings.cs}, fixtures/labview-capture/
+Tests 0/0 (스캐폴드) · 빌드 경고0/에러0
+[결정] csproj 설정은 nexys-modbus-workbench와 동일 조합 이식: net8.0 / LangVersion 12 / Nullable enable / TreatWarningsAsErrors true / GenerateDocumentationFile true. 테스트는 xunit 2.9.2 + Microsoft.NET.Test.Sdk 17.11.1 + coverlet.collector 6.0.2 (CLAUDE.md §2 허용 목록 내).
+[미정] fixtures/labview-capture/ 는 빈 디렉터리 — 캡처 픽스처 부재 (M7 회귀 skip 예정).
+Next: M1
+
+## M1 — 메모리맵 + IEC 주소 파서 · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Memory/{MemoryArea,DataSize,AddressingOptions,IecAddress,AddressRangeException,PlcMemoryOptions,PlcMemory}.cs, tests/Nxs.Core.Tests/Memory/{IecAddressTests,PlcMemoryTests}.cs
+Tests 16/16 · 빌드 경고0/에러0
+DoD: PRD M1 "파서·접근 벡터 통과" 충족. DESIGN 골든 벡터 전 항목 통과 —
+  %MW100→(M,Word,100,byte200..202) · %MX801→(M,bit801,byte100 bit1) · %IX0.2.5→절대비트133 · %IW0.5.0→절대워드20 ·
+  %ZW10/%IX0.2 → 파스 실패 · %MW0=0x0001→%MB0=0x01·%MX0=true(리틀엔디안) · 연속워드10개 라운드트립.
+[결정] 슬롯 형식 산식을 크기 지정자에 일반화: 절대오프셋 = (base×BasePoints + slot×SlotPoints) / size.BitWidth() + point.
+  DESIGN의 %IX0.2.5(=133)·%IW0.5.0(=20) 두 벡터를 동시에 만족하는 단일 산식이며, 산식은 spec 확정 후에도 불변(상수만 갱신).
+[결정] AddressingOptions.SlotPoints 기본 64 (DESIGN 가정값). SlotsPerBase는 매뉴얼 미확정이라 기본 12 가정 + 설정 가능,
+  Validate()가 SlotPoints를 32의 배수로 강제 — DWord(32비트) 단위 환산이 항상 정수여야 산식이 성립하기 때문.
+[결정] 스레드 안전은 전 영역 단일 lock. 비트 쓰기가 읽기-수정-쓰기이므로 바이트를 공유하는 동시 비트 쓰기의
+  갱신 유실을 막아야 한다 → 8레인 × 16000비트 동시 쓰기 회귀 테스트로 고정.
+[결정] 범위 위반은 AddressRangeException(영역/시작/길이/영역크기)으로 통일하고 위반 시 메모리를 건드리지 않는다
+  (연속 쓰기 부분 적용 금지). PRD X-04의 에러 응답 변환 지점 — 와이어 에러 코드 매핑은 spec 게이트 대상.
+[미정] spec/xgi-addressing.md 4개 항목(슬롯당 점수·베이스당 슬롯 수·워드 환산·%M 크기) 전부 미기재.
+  현재는 기본 가정값 + 설정으로 조정 가능. 확정 시 AddressingOptions 상수만 갱신하면 된다.
+Next: M2
+
+## M2 — FEnet 프레임 코덱 (spec 게이트) · 2026-07-30
+Status ⛔ (blocked-part) / 나머지 ✅
+Files: src/Nxs.Core/Protocol/{IFrameLengthRule,FramingException,StreamFrameAssembler,Hex,PlcRequest,PlcErrorReason,PlcResponse,PlcRequestLimits,PlcRequestExecutor,FrameExchange,IFrameCodec}.cs,
+  tests/Nxs.Core.Tests/Protocol/{TestOnlyLengthPrefixFraming,StreamFrameAssemblerTests,HexTests,PlcRequestExecutorTests}.cs
+Tests 49/49 · 빌드 경고0/에러0
+
+⛔ blocked-part: **XGT FEnet 프레임 레이아웃 미구현.**
+  근거: spec/xgt-fenet-reference.md 는 "채울 내용" 목차만 있고 6개 항목(①헤더 레이아웃 ②명령 코드·데이터 타입 코드 표
+  ③변수명 표기 규칙 ④에러 상태 코드 표 ⑤예제 프레임 2쌍 ⑥접속 포트·프로토콜 기본값) 전부 미기재.
+  fixtures/labview-capture/ 도 비어 있어 캡처 근거도 없음. CLAUDE.md §3(조작 제로) 에 따라 기억/추측 구현 금지 → 미구현.
+  영향 범위: PRD X-03(FEnet 전용 프로토콜 프레임)·X-04(실장비 동일 에러 프레임)의 **와이어 인코딩 절반**,
+  DESIGN "골든 벡터 § 프레임"(spec 예제 프레임 대조) — 근거 도착 시 확정.
+  해제 조건: spec 6항목 기재 **또는** fixtures/labview-capture/ 에 req_*.bin + .expected 배치.
+  해제 시 작업량: IFrameCodec 구현체 1개 추가 (서버·실행기·프레이밍은 수정 불필요 — 아래 구조가 그 지점을 미리 비워 둠).
+
+구현한 것 (spec 무관 — 프로토콜 지식 0):
+[결정] 프레임 경계 판정을 IFrameLengthRule 로 주입 분리 → StreamFrameAssembler 는 XGT 세부를 모른다.
+  DESIGN "헤더 완독→길이만큼 완독" 상태머신을 이 층에 두어, spec 도착 시 규칙 구현체만 갈아끼우면 된다.
+[결정] 부분 수신 불변(CLAUDE.md §4.2)을 테스트 전용 합성 프레이밍(TestOnlyLengthPrefixFraming, 0xAA55+len16LE)으로 고정.
+  **XGT 가 아님을 클래스 주석·이름에 명시**하고 테스트 프로젝트에만 둔다(프로덕션 오염 방지).
+  1바이트씩 주입 + 전 분할점(0..N) 왕복 + 25프레임 결정적 청크 스트리밍 + 최대길이 초과/헤더 해석불가 거절까지 검증.
+[결정] 프로토콜 중립 요청/응답 모델(PlcRequest/PlcResponse/PlcErrorReason) + PlcRequestExecutor 로
+  "요청 의미 → 메모리 효과 / 거절 사유"를 와이어와 분리. PlcErrorReason 은 **추상 사유이며 와이어 에러 코드가 아님**을 명시 —
+  실제 에러 코드 표 매핑이 ⛔ 게이트 대상.
+[결정] 거절은 예외가 아닌 PlcResponse 반환값 ("정확히 거절하는 것도 실장비 역할" — PRD X-04).
+  쓰기는 검증 후 적용이라 거절된 요청은 메모리를 전혀 건드리지 않는다(부분 적용 금지 회귀 테스트 있음).
+[결정] 한계값(개별 블록 수·연속 바이트 수)은 PlcRequestLimits 로 설정화하고 **기본 null=무제한**.
+  근거 없는 상한을 넣으면 시뮬레이터가 실장비에 없는 거절을 발명해 LabVIEW 검증에 거짓 실패를 만든다 → 관용적 기본이 보수적 선택.
+[결정] IFrameCodec 을 "프레임 → FrameExchange(응답 프레임 + 로그 요약 + 사유)" 한 메서드로 좁힘.
+  에러 코드 매핑·Invoke/Frame ID 에코까지 구현체 안에 가두어, 서버(M3)가 프로토콜 지식 0으로 남는다.
+[미정] 접속 포트 기본값 미기재 → 서버는 포트를 필수 설정 인자로 받고 기본값을 갖지 않는다(M3).
+Next: M3
+
+## M3 — 서버 e2e (테스트 클라이언트 왕복) · 2026-07-30
+Status ✅ (⛔ M2 게이트는 그대로 — 아래 [미정] 참조)
+Files: src/Nxs.Core/Time/{ITimeSource,SystemTimeSource}.cs, src/Nxs.Core/Diagnostics/{TrafficEvent,ITrafficSink}.cs,
+  src/Nxs.Core/Server/{PlcTcpServerOptions,PlcTcpServer}.cs,
+  tests/Nxs.TestKit/{Nxs.TestKit.csproj,FakeTimeSource,TestOnlyLengthPrefixFraming,TestOnlyFrameCodec,PlcTestClient,RecordingTrafficSink}.cs,
+  tests/Nxs.Integration.Tests/{Nxs.Integration.Tests.csproj,GlobalUsings,PlcTcpServerTests}.cs
+Tests 71/71 (Core 53 + Integration 18) · 빌드 경고0/에러0 · 통합 테스트 3회 반복 실행 안정
+DoD: PRD M3 "읽기/쓰기/연속/오류 전 케이스 + 멀티클라이언트" 충족 —
+  개별읽기·개별쓰기·연속읽기·연속쓰기 왕복 / 범위초과·주소파스실패 거절 / 1바이트씩 전송 왕복 /
+  한 write 에 2요청 파이프라인 → 순서대로 2응답 / 3클라이언트 × 30왕복 응답 혼선 없음 /
+  4클라이언트 × 20쓰기 전량 반영 / 연결 해제·프레이밍 위반 격리 / 정지·재시작 / 중복 시작 거절 / 트래픽 Rx·Tx·오류 기록.
+
+[결정] 서버를 프로토콜 무지(protocol-agnostic)로 설계: PlcTcpServer 는 IFrameCodec 만 안다.
+  → XGT 근거가 도착해도 이 파일은 **수정 대상이 아니다**. 코덱 1개만 추가하면 실장비 응답이 된다.
+[결정] 연결마다 독립 StreamFrameAssembler → 부분 수신 상태가 연결별로 격리된다.
+[결정] 프레이밍 위반 = 해당 연결만 종료(수신 상태 재동기화 불가), 요청 거절 = 연결 유지 + 에러 응답.
+  실장비의 태도와 같고, 오류 후에도 같은 연결이 계속 동작하는지 회귀 테스트로 고정했다.
+[결정] 테스트에서 Port=0 (OS 배정) 사용 → 포트 충돌로 인한 플레이키 제거. LocalEndPoint 로 실제 포트를 노출.
+[결정] 트래픽 기록은 ITrafficSink 주입(이벤트 아님). 서버가 여러 스레드에서 호출하므로 "스레드 안전·비블로킹"
+  계약을 인터페이스 주석에 명시. 전체 TrafficLog(필터·파일 저장)는 M6.
+[결정] 타임스탬프는 전부 ITimeSource.UtcNow — FakeTimeSource 주입으로 결정적 검증(테스트가 시각을 단정한다).
+  단조 증가 밀리초를 별도 제공(월클럭 점프에 영향받지 않는 자동화 tick 용, M6에서 사용).
+[결정] TestKit 을 별도 프로젝트로 분리 — Core.Tests·Integration.Tests·(M5 UI 스모크)가 공유한다.
+  합성 코덱/프레이밍은 **XGT 가 아님**을 클래스명(TestOnly*)·주석에 명시해 프로덕션 혼입을 구조적으로 차단.
+[미정] 합성 코덱으로 검증한 것은 **서버 파이프라인**이다. 실제 XGT 프레임 왕복은 ⛔ M2 게이트가 풀린 뒤
+  동일 테스트 구조를 실코덱으로 한 번 더 돌려야 완결된다(M7 캡처 회귀가 그 자리).
+[미정] 기본 포트 없음 — PlcTcpServerOptions.Port 를 required 로 두어 근거 없는 기본값을 넣지 않았다.
+Next: M4
+
+## M4 — I/O 구성 모델 + .nxp · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Configuration/{ModuleDefinition,IoConfigurationException,ModuleMapping,IoConfiguration,AnalogChannelScale,NxpProject,NxpProjectFile}.cs,
+  tests/Nxs.Core.Tests/Configuration/{IoConfigurationTests,AnalogChannelScaleTests,NxpProjectTests}.cs
+Tests 108/108 (Core 90 + Integration 18) · 빌드 경고0/에러0
+DoD: PRD M4 "매핑·라운드트립 테스트" 충족 — CONTEXT 랙 슬롯별 매핑 검증 + .nxp 저장/로드 라운드트립.
+
+CONTEXT 랙 매핑 결과 (슬롯 스트라이드 256점):
+  슬롯0 XGL-EFMT(B) / 슬롯1 XGL-C42A → 통신 모듈, 프로세스 데이터 0 → 매핑 없음
+  슬롯2 XGI-D24A → %IX512..543 (32점) · 슬롯3 → %IX768..799
+  슬롯4 XGQ-TR4A → %QX1024..1055 (32점)
+  슬롯5 XGF-AD16A → %IW80..95 (16채널=16워드) · 슬롯6 → %IW96..111
+  영역 내 범위 무중첩을 테스트로 고정.
+
+[결정] **CONTEXT 랙의 슬롯 스트라이드를 256점(16워드)으로 지정.** 기본 가정 64점으로는 XGF-AD16A(16채널×16비트=256비트)가
+  담기지 않는다 — 64점 스트라이드에 AD16A를 넣으면 IoConfigurationException 으로 거절되는 것을 테스트로 고정했다.
+  DESIGN "spec 확정 시 [결정] 로그로 상수만 갱신, 산식 불변" 조항에 따라 **산식은 그대로**(base×BasePoints + slot×SlotPoints)
+  두고 이 랙의 상수만 지정한다. AddressingOptions 기본값은 64로 유지 → M1 골든 벡터 불변(수정/삭제 없음).
+[미정] 실제 XGI 슬롯 할당 규칙(고정 64점인지, 모듈별 가변인지)은 spec/xgi-addressing.md 미기재.
+  확정 시 IoConfiguration.CreateDefaultRack() 의 SlotPoints 상수 하나만 바꾸면 된다.
+[결정] 구성 모순은 침묵 대신 예외: 모듈이 스트라이드보다 큼 / 슬롯 번호 중복 / 베이스 용량 초과 → IoConfigurationException.
+  겹치는 매핑을 조용히 만들어 두면 나중에 원인 모를 값 오염으로 나타난다.
+[결정] 통신 모듈(FEnet/Cnet)은 OccupiedBits=0 이라 매핑 결과에서 제외 — 슬롯0·1이 %I/%Q 를 잠식하지 않는다.
+[결정] AnalogChannelScale 은 공학단위↔raw 양방향 + 범위 밖 클램프. 양극성(-10..+10V) 스케일을 위해
+  raw 를 부호 있는 값으로 다루고 워드 저장은 2의 보수(RawToWord/WordToRaw) — 음수 raw 가 왕복에서 살아남는지 테스트로 고정.
+[결정] .nxp 는 System.Text.Json(인박스, NuGet 추가 없음) camelCase + WriteIndented — 사람이 열어 고칠 수 있어야 한다.
+  저장은 임시 파일 → File.Move 교체(원자적)이고, 저장 전에 BuildMap()·ToServerOptions() 로 검증한다
+  → 실패한 저장이 기존 파일을 손상시키지 않는 것을 테스트로 고정.
+[결정] formatVersion 은 **스키마 바인딩 전에** 검사한다. 미래 버전 파일은 이 프로그램이 모르는 필드를 가질 수 있어
+  바인딩이 먼저 실패하면 "JSON 오류"로 오진된다 — 실제로 그 오진이 테스트에서 잡혀 순서를 바로잡았다.
+[결정] 자동화 룰 절은 M4 .nxp 에 넣지 않았다(타입이 M6에 생긴다). JSON 은 가산적이므로 M6에서 키를 추가해도
+  기존 파일이 그대로 로드되어 포맷 버전 상승이 불필요하다.
+Next: M5
+
+## M5 — UI: 랙 패널(토글·LED·AD 입력) · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Simulator/SimulatorEngine.cs,
+  src/Nxs.App/{Nxs.App.csproj,Program.cs,App.axaml,App.axaml.cs},
+  src/Nxs.App/ViewModels/{MainWindowViewModel,SlotViewModel,DigitalPointViewModel,AnalogChannelViewModel}.cs,
+  src/Nxs.App/Views/{MainWindow.axaml,MainWindow.axaml.cs},
+  tests/Nxs.App.Tests/{Nxs.App.Tests.csproj,TestAppBuilder,VisualTokenTests,RackPanelSmokeTests}.cs,
+  tests/Nxs.Integration.Tests/SimulatorEngineTests.cs
+Tests 154/154 (Core 90 + Integration 32 + App 32) · 빌드 경고0/에러0
+DoD: PRD M5 "스모크: 테스트 클라이언트로 쓴 값이 LED에, 토글이 읽기에 반영" 충족 —
+  헤드리스로 윈도우 기동 → 서버 시작 → 클라이언트가 %QX1031 쓰기 → LED VM IsOn=true 확인 /
+  UI 토글 %IX517 → 클라이언트 읽기 0x01, 해제 시 0x00 / AD 공학단위 5V 입력 → raw 2000 → 클라이언트 읽기 2000.
+
+비주얼 이식 검증 (DESIGN Rev.B 골든 벡터 — 전 항목 통과):
+  App.axaml 을 원본 nexys-modbus-workbench/src/Nmw.App/App.axaml 에서 **x:Class 한 줄만 바꿔 그대로 이식**(248행).
+  리소스 값 대조 테스트로 고정: AccentBrush=#7A1020 · AccentSoftBrush=#F0EAE7 · CardBrush=#FCFBF9 ·
+  CardSoftBrush=#F1EFEA · LineBrush=#DDDBD3 · InkBrush=#16171A · InkHoverBrush=#2C2E33 ·
+  TextPrimaryBrush=#16171A · TextSecondaryBrush=#8B897F · ErrorBrush=#9C2030 ·
+  ToggleButtonBackgroundChecked=#7A1020(+hover #9C2030 / pressed #5A0B18 / 흰 글자) ·
+  SystemAccentColor 계열 3개 · AppBackgroundBrush 그라데이션 3스톱(#F4F3F0/#ECEAE5/#DDDBD3) ·
+  pill 클래스(CornerRadius 17 + LineBrush 테두리) · 실제 윈도우의 mono 클래스 컨트롤 전수 FontFamily 검사.
+
+[결정] 데이터 표시 monospace 를 `mono` 스타일 클래스로 도입. 원본은 MainWindow.axaml 에 인라인
+  `FontFamily="Menlo,Consolas,monospace"` 1곳뿐이지만, 시뮬레이터는 데이터 컨트롤이 100개 이상(32점×3 + 16채널×2 + 주소 라벨)이다.
+  **값은 원본과 완전히 동일**하고 새 시각 디자인을 만들지 않았으므로 "새 스타일 발명 금지"에 저촉되지 않는다.
+[결정] 시뮬레이터 고유 요소(point 토글·led 타원·pill connected/disconnected·notice 배너)는
+  기존 토큰만 재사용해 정의 — 팔레트 외 색을 도입하지 않았다(녹색 LED 금지 조항 준수).
+  LED OFF = Transparent 채움 + LineBrush 테두리, ON = AccentBrush 채움을 테스트로 고정.
+[결정] SimulatorEngine 을 Core 에 두어 UI 무관 계층으로 분리 → 랙/서버/메모리 조합을 App 없이 테스트할 수 있다.
+[결정] **코덱 부재를 UI가 정직하게 드러낸다.** codecFactory 가 null 이면 CanStartServer=false,
+  ServerUnavailableReason 이 spec 파일 경로와 해제 조건을 그대로 안내하고, 시작 버튼이 비활성화되며 notice 배너가 뜬다.
+  없는 프로토콜을 흉내내는 대신 "왜 못 켜는지"를 말한다 — 조작 제로 원칙의 UI 표현.
+  단 **게이트는 서버에만 걸린다**: 랙 패널(토글·LED·AD)은 코덱 없이도 전부 조작 가능하다(테스트로 고정).
+[결정] 출력 점은 IsWritable=false — 마스터가 쓰는 값을 표시만 한다. 입력 점만 사용자 토글이 메모리에 반영된다.
+[결정] UI 갱신은 DispatcherTimer 200ms 로 메모리를 읽기만 한다(블로킹 I/O 없음, CLAUDE.md §3).
+[결정] AD 입력칸은 `_displayedRaw` 기준으로 **외부 변경만** 반영한다.
+  최초 구현에서 주기 갱신이 입력 중 텍스트를 되돌리는 버그가 있었고(조건에 `Error is null` 을 잘못 넣어
+  오류 상태에서 되돌림이 발생), 회귀 테스트(PeriodicRefreshDoesNotClobberInProgressTyping)가 이를 잡아 수정했다.
+[결정] 프로젝트 저장은 현재 UI 상태(켜진 입력 점 + 0이 아닌 AD 채널)를 초기값으로 스냅샷한다 → 저장/열기 라운드트립 테스트.
+  깨진 .nxp 를 열면 오류 메시지만 표시하고 앱은 계속 동작한다(테스트로 고정).
+[미정] 파일 열기/저장 다이얼로그는 미연결 — OpenProject/SaveProject(path) API 만 있다. M8 에서 메뉴와 연결한다.
+Next: M6
+
+## M6 — 값 자동화 + 트래픽 로그 · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Automation/{IValueGenerator,ValueGenerators,AutomationRule,AutomationEngine,AutomationRuleSettings}.cs,
+  src/Nxs.Core/Diagnostics/TrafficLog.cs, src/Nxs.Core/Configuration/NxpProject.cs(자동화 절 추가),
+  src/Nxs.Core/Simulator/SimulatorEngine.cs(자동화 루프), src/Nxs.App/ViewModels/{AutomationRuleViewModel,TrafficRowViewModel,MainWindowViewModel}.cs,
+  src/Nxs.App/Views/MainWindow.axaml(값 자동화·트래픽 로그 탭), tests/Nxs.Core.Tests/Automation/{ValueGeneratorTests,AutomationEngineTests,AutomationRuleSettingsTests}.cs,
+  tests/Nxs.Core.Tests/Diagnostics/TrafficLogTests.cs, tests/Nxs.App.Tests/AutomationAndTrafficSmokeTests.cs,
+  tests/Nxs.TestKit/FakeTimeSource.cs(Delay 양보 수정)
+Tests 222/222 (Core 145 + Integration 32 + App 45) · 빌드 경고0/에러0
+DoD: PRD M6 "제너레이터 벡터 + 스모크" 충족.
+
+DESIGN 골든 벡터 (자동화 — 검증된 값) 전 항목 통과:
+  Ramp(0,100,25) tick0..5 → 0,25,50,75,100,0 · Sine(0,1000,period4) → 500,1000,500,0 · Toggle → T,F,T
+  룰 엔진을 통해서도 동일 수열이 메모리에 나타나는지 확인(SuccessiveDuePeriodsWalkTheGoldenRampVector).
+
+[결정] Ramp 산식은 골든 벡터에서 역산: 한 주기의 값 개수 = (Max-Min)/Step + 1, value = Min + (tick % 개수) × Step.
+  이것이 "Max 를 정확히 찍고 다음 tick 에 Min 으로 복귀"라는 벡터를 만족하는 유일한 해석이다.
+  Increment(모듈러 카운터)와 별개 제너레이터로 분리 — 둘의 wrap 동작이 다르다.
+[결정] Random 은 System.Random 인스턴스를 쓰지 않고 (seed, tick) 해시(splitmix64 계열)로 만든다.
+  Random 인스턴스는 호출 순서에 값이 의존해 "tick 순수 함수" 계약을 깨뜨린다 — 같은 시드로 같은 수열이 재현되는지,
+  임의 순서 호출에도 값이 같은지 테스트로 고정.
+[결정] tick 진행 기준은 ITimeSource.MonotonicMilliseconds (월클럭 아님). 시스템 시각이 점프해도 주기가 튀지 않는다.
+[결정] 한 룰의 실패가 다른 룰을 막지 않는다 — 범위 밖 주소는 AutomationTickResult.Failures 로 보고하고 계속 진행.
+[결정] AutomationEngine.SetEnabled(index,bool) 로 실행 중 켜고 끌 수 있게 했다. 룰은 불변 record 라
+  UI 체크박스가 동작하려면 엔진 쪽에 가변 상태가 필요했다. 다시 켤 때 tick 인덱스는 유지된다(테스트로 고정).
+[결정] 공학단위 룰은 대상 주소가 AD 채널이면 **그 채널의 스케일을 자동으로 공유**한다
+  (NxpProject.BuildAutomationRules 가 매핑을 역조회). DESIGN "채널 설정의 스케일 공유" 조항의 구현.
+  채널이 아닌 주소에 공학단위를 켜면 스케일 없이(raw) 동작한다 — 조용히 틀린 변환을 하지 않는다.
+[결정] TrafficLog 는 고정 용량(기본 5000) 링 버퍼. 장시간 켜 두는 도구라 무한 누적은 메모리를 잠식한다.
+  넘친 건수를 DroppedCount 로 노출하고 저장 파일 헤더에도 적어, 로그가 **조용히 사라지지 않게** 했다.
+[결정] 트래픽 표시는 최근 500행 상한. 5000행을 매 200ms 재투사하면 UI가 버거워진다.
+[버그 수정] FakeTimeSource.Delay 가 완료된 Task 를 반환해 `while(!ct){ work(); await Delay(); }` 루프가
+  스케줄러에 양보하지 않고 스레드를 영구 점유했다(RunAsync 테스트가 무한 정지). 시각 전진 후 Task.Yield() 하도록 수정.
+  이는 테스트 더블의 결함이었지 프로덕션 코드 문제는 아니었다.
+[수정] "M4 시절 .nxp(자동화 절 없음) 로드" 테스트를 정규식 문자열 삭제 방식에서 손으로 쓴 레거시 문서로 교체.
+  정규식이 마지막 키를 지워 trailing comma 를 남기는 **테스트 자체의 결함**이었다. JSON 가산성은 그대로 확인됨.
+[미정] 트래픽 로그 저장/프로젝트 열기·저장은 API(SaveTraffic/OpenProject/SaveProject)만 있고 파일 다이얼로그 미연결 — M8.
+Next: M7
+
+## M7 — 캡처 픽스처 회귀 + (있으면) Cnet · 2026-07-30
+Status ⚠️ (하네스 ✅ / 회귀 스위트 비활성 — 입력 부재) · Cnet ⛔
+Files: src/Nxs.Core/Fixtures/{CaptureCase,CaptureFixtureLoader,CaptureReplayRunner}.cs,
+  tests/Nxs.Integration.Tests/{CaptureReplayTests,LabViewCaptureRegressionTests}.cs
+Tests 237/237 (Core 145 + Integration 47 + App 45) · 빌드 경고0/에러0
+DoD: PRD M7 "fixtures 재생 전 케이스 응답 일치" — **입력 부재로 실행할 케이스가 0건**.
+  DESIGN "부재 시 skip" 조항에 따라 스위트는 비활성이며, 그 사실을 테스트가 명시적으로 고정한다.
+
+⛔ blocked-part 1: **X-09 Cnet 서버 미구현.**
+  근거: spec/xgt-cnet-reference.md 도 "채울 내용" 한 줄만 있고 제어문자(ENQ/EOT/ACK/NAK)·국번·명령어(RSS/WSS)·
+  BCC 계산 범위·예제 프레임 전부 미기재. CLAUDE.md §3 에 따라 미구현. (P1 항목이므로 P0 완성도에는 영향 없음)
+  참고: Cnet 도 IFrameCodec + StreamFrameAssembler 구조를 그대로 쓸 수 있다 — 전송만 System.IO.Ports 로 바뀐다.
+
+⚠️ 비활성 사유 2겹: (1) fixtures/labview-capture/ 가 비어 있음 (2) XGT 코덱 부재(M2 ⛔).
+  **둘 중 하나만 풀려도 부족하다**: 캡처를 해석할 코덱이 없으면 재생 불가, 코덱이 있어도 대조할 실장비 응답이 없으면
+  정합성 확인 불가. 두 조건을 모두 충족해야 이 스위트가 "실장비 대역"으로 기능한다.
+
+[결정] **빈 디렉터리를 훑고 통과하는 무의미한 테스트를 만들지 않기 위해**, 하네스 자체를 합성 픽스처로 검증했다
+  (CaptureReplayTests 11건: 로더 탐색·정렬·확장자 규약 / 일치·불일치·기대값부재·프레이밍위반·중도절단 판정 /
+  2요청 캡처 응답 연결 / 생성한 픽스처 디렉터리 e2e). 실캡처가 오면 **같은 코드**가 그것을 검사한다.
+[결정] 재생은 요청 바이트를 **1바이트씩** 주입한다 → 캡처 회귀가 부분 수신 불변까지 동시에 검증한다(CLAUDE.md §4.2).
+  BytesFedOneAtATime 을 결과에 노출해 실제로 1바이트씩 넣었는지 테스트가 확인한다.
+[결정] .expected 부재는 **통과가 아니라 NoExpectedResponse(판정 불가)** 로 보고하고, 사람이 매뉴얼 대조로 작성할 수 있도록
+  현재 시뮬레이터 응답 hex 를 메시지에 담는다. 시뮬레이터 출력을 그대로 기대값으로 복사하면
+  회귀가 자기 자신을 검증하는 셈이 되어 무의미하므로, 자동 생성은 하지 않는다.
+[결정] 캡처가 있는데 코덱이 없으면 **조용히 통과시키지 않고 실패**시킨다. 실제로 합성 캡처 1건을 넣어
+  이 경로를 확인했다 — "캡처 'req_probe' 가 있지만 XGT FEnet 코덱이 없어 재생할 수 없습니다 …(M2 ⛔ blocked-part)"
+  로 실패하고, 확인 후 파일을 제거했다. 게이트가 공허하지 않다는 증거.
+[결정] RegressionSuiteStateIsReportedExplicitly 가 현재 상태(캡처 0건 · 코덱 null)를 고정한다.
+  캡처가 추가되면 이 테스트가 실패해 "스위트가 활성화되었고 코덱 연결이 필요하다"는 신호를 준다.
+[결정] xUnit v2 는 데이터가 빈 Theory 를 오류로 처리하므로 센티널 1건("(캡처 없음)")으로 비활성 경로를 표현했다.
+  허용 NuGet 목록 밖(Xunit.SkippableFact)을 쓰지 않기 위한 선택이다.
+[결정] CaptureFixtureLoader.FindDirectory 는 실행 위치에서 위로 올라가며 fixtures/labview-capture 를 찾는다
+  (테스트가 bin/ 하위에서 돌기 때문). 탐색 자체가 항상 성립하는지 별도 테스트로 고정 — 캡처를 넣기만 하면 편입된다.
+Next: M8
+
+## M8 — publish + 사용법 README + LabVIEW 접속 체크리스트 · 2026-07-30
+Status ✅
+Files: README.md, LABVIEW_CHECKLIST.md, SMOKE_CHECKLIST.md,
+  src/Nxs.App/Views/{MainWindow.axaml,MainWindow.axaml.cs}(파일 다이얼로그 연결)
+Tests 237/237 (Core 145 + Integration 47 + App 45) · 빌드 경고0/에러0
+DoD: PRD M8 "publish 확인 후 삭제" 충족.
+
+publish 검증:
+  `dotnet publish src/Nxs.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+   -p:IncludeNativeLibrariesForSelfExtract=true`
+  → 단일 파일 Nxs.App.exe 89MB 생성. `file` 판정 **PE32+ executable (GUI) x86-64, for MS Windows** 확인.
+  CLAUDE.md §5 에 따라 확인 후 삭제 완료 (publish 디렉터리 + src/*/bin/Release 제거).
+  ⚠️ **실행 검증은 하지 않았다** — 빌드 호스트가 macOS 라 Windows 바이너리를 구동할 수 없다.
+  exe 가 올바른 형식으로 생성됨까지만 확인했고, 실제 기동은 Windows PC 에서 SMOKE_CHECKLIST.md 0장으로 수행해야 한다.
+
+[결정] M5/M6 에서 [미정]으로 남긴 파일 다이얼로그를 연결했다 (Avalonia StorageProvider).
+  헤더에 프로젝트 열기/저장·트래픽 로그 저장 버튼 3개(App.axaml 이식분의 IconFolder/IconSave/IconDownload 재사용 —
+  새 아이콘 도입 없음). 다이얼로그 로직은 View 코드비하인드에 두어 ViewModel 의 UI 무의존을 유지했다.
+[결정] README.md 를 **⛔ 게이트 설명으로 시작**하도록 썼다. 이 저장소를 처음 여는 사람이 가장 먼저 알아야 하는 것은
+  "왜 서버가 안 켜지는지"와 "무엇을 채우면 켜지는지"이기 때문이다. 해제 방법 2가지(매뉴얼 발췌 / LabVIEW 캡처)와
+  근거 도착 후 작업량(IFrameCodec 구현체 1개, 그 외 무수정)을 명시했다.
+[결정] LABVIEW_CHECKLIST.md 의 0장을 "캡처 먼저"로 두었다. 1~5장은 코덱이 있어야 유효하지만
+  0장은 지금 당장 가능하고, 그 캡처가 코덱 구현의 근거가 되므로 순서상 맨 앞이 맞다.
+  증상별 원인 표(접속 불가·값 이상·엔디안·스케일·프레이밍)를 붙여 현장에서 바로 쓰게 했다.
+[결정] SMOKE_CHECKLIST.md 는 코덱 없이 수행 가능한 장(0~2, 4~7)과 불가능한 장(3)을 구분해 표시했다.
+  게이트가 서버에만 걸려 있어 랙 패널·자동화·프로젝트 파일은 지금도 전부 검증 가능하다.
+[미정] spec/ 3개 파일은 사람의 입력 파일이라 손대지 않았다(내용을 추가하면 근거 조작이 된다).
+Next: —
+
+---
+
+# 빌드 종료 요약 (M1~M8)
+
+전체: 테스트 237/237 통과 · 빌드 경고0/에러0 · publish 확인 후 삭제 완료.
+
+## ⛔ 미해결 blocked-part (전부 spec 근거 부재 — 코드 문제 아님)
+1. **XGT FEnet 프레임 코덱** (M2) — spec/xgt-fenet-reference.md 6항목 미기재.
+   영향: PRD X-03·X-04 의 와이어 인코딩, DESIGN "골든 벡터 § 프레임", 앱에서 서버 기동.
+   해제 시 작업량: IFrameCodec 구현체 **1개** 추가. 서버·프레이밍·실행기·메모리·UI·자동화는 수정 불필요.
+2. **Cnet 서버** (M7, PRD X-09, P1) — spec/xgt-cnet-reference.md 미기재.
+   동일 IFrameCodec + StreamFrameAssembler 구조 재사용 가능, 전송만 System.IO.Ports 로 교체.
+3. **캡처 회귀 스위트 비활성** (M7) — fixtures/labview-capture/ 비어 있음 + 위 1번.
+   하네스는 합성 픽스처로 검증 완료. 캡처를 넣으면 자동 편입되고 코덱 부재 시 실패로 알린다(실측 확인).
+
+## 미확정 가정 (spec/xgi-addressing.md 부재 — 확정 시 상수만 갱신)
+- 슬롯당 점수: CONTEXT 랙은 256점(16워드) 가정. XGF-AD16A 16워드가 기본 가정 64점에 담기지 않아 택한 값.
+  AddressingOptions 기본값은 64 유지 → M1 골든 벡터 불변. IoConfiguration.CreateDefaultRack() 의 상수 1개만 변경 지점.
+- 베이스당 슬롯 수 12 가정 · FEnet 기본 포트 없음(필수 설정) · 요청 한계값 무제한(관용적 기본).
+
+## 완성된 것 (spec 무관 전 항목)
+메모리맵·IEC 주소 파서(골든 벡터 통과) / 부분 수신 불변 프레이밍 상태머신(1바이트 주입 + 전 분할점) /
+프로토콜 중립 요청 실행기 + 정확한 거절 / 멀티클라이언트 TCP 서버(연결 격리·정지/재시작) /
+I/O 구성 자동 매핑 + .nxp 라운드트립 / Avalonia 랙 패널(비주얼 이식 대조 테스트 통과) /
+값 자동화 6종(골든 벡터 통과·tick 순수 함수) / 트래픽 로그(링 버퍼·오류 필터·파일 저장) / 캡처 재생 하네스.
