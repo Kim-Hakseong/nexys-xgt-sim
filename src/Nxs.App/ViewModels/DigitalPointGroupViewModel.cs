@@ -12,8 +12,7 @@ namespace Nxs.App.ViewModels;
 /// </summary>
 /// <remarks>
 /// <c>%MX</c>=1개 · <c>%MB</c>=8개 · <c>%MW</c>=16개 · <c>%MD</c>=32개 · <c>%ML</c>=64개.
-/// 입력 모드는 각 비트를 토글할 수 있고, 출력 모드는 LED 로 표시만 한다.
-/// 두 모드 모두 외부(마스터) 변경을 표시에 반영한다 — 양방향 확인.
+/// **양방향이다**: 비트를 눌러 메모리에 쓰면 마스터가 읽고, 마스터가 쓰면 표시가 따라온다.
 /// </remarks>
 public sealed partial class DigitalPointGroupViewModel : ObservableObject
 {
@@ -36,9 +35,7 @@ public sealed partial class DigitalPointGroupViewModel : ObservableObject
         Address = entry.Resolve(addressing);
         BitCount = DigitalPointEntry.BitCountOf(Address);
 
-        // 입력·출력 모두 사용자가 직접 켤 수 있다.
-        // 출력을 감시 전용으로 두면 "마스터가 이 값을 읽었을 때 어떻게 되는지" 를 시험할 방법이 없다 —
-        // 실장비에서는 PLC 프로그램이 %Q 를 쓰지만 시뮬레이터에서는 사람이 그 역할을 해야 한다.
+        // 모든 비트가 양방향이다 — 사용자가 쓰고, 외부 변경도 읽어 표시한다.
         for (var i = 0; i < BitCount; i++)
         {
             Bits.Add(new DigitalPointViewModel(
@@ -64,20 +61,8 @@ public sealed partial class DigitalPointGroupViewModel : ObservableObject
     /// <summary>사용자 별칭.</summary>
     public string Label => Entry.Label;
 
-    /// <summary>동작 방향.</summary>
-    public DigitalPointMode Mode => Entry.Mode;
-
-    /// <summary>
-    /// 사용자가 토글할 수 있는지. **입력·출력 모두 참이다.**
-    /// </summary>
-    /// <remarks>
-    /// 출력을 감시 전용으로 두면 마스터가 읽을 %Q 값을 만들 방법이 없다.
-    /// 두 모드의 차이는 표시 방식(토글 버튼 vs LED)과 관용적 용도뿐이다.
-    /// </remarks>
+    /// <summary>사용자가 토글할 수 있는지. 양방향이므로 항상 참이다.</summary>
     public bool IsWritable => true;
-
-    /// <summary>입력 모드인지(토글 버튼으로 표시).</summary>
-    public bool IsInputMode => Entry.Mode == DigitalPointMode.Input;
 
     /// <summary>크기 배지.</summary>
     public string SizeText => Address.Size switch
@@ -100,12 +85,12 @@ public sealed partial class DigitalPointGroupViewModel : ObservableObject
         {
             if (!IsArray)
             {
-                return IsInputMode ? "비트 1개 · 토글" : "비트 1개 · 마스터가 쓰는 값 (직접 조작도 가능)";
+                return "비트 1개 · 양방향 (눌러 쓰기 / 마스터 쓰기 표시)";
             }
 
             var first = Bits[0].AddressText;
             var last = Bits[^1].AddressText;
-            return $"비트 {BitCount}개 · {first} ~ {last}";
+            return $"비트 {BitCount}개 · {first} ~ {last} · 양방향";
         }
     }
 

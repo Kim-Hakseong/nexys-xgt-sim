@@ -29,38 +29,36 @@ public class DigitalPointGroupSmokeTests
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
 
-        vm.NewInputPointAddress = "%MX801";
-        vm.NewInputPointLabel = "운전 지령";
-        vm.AddInputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MX801";
+        vm.NewDigitalLabel = "운전 지령";
+        vm.AddDigitalPointCommand.Execute(null);
 
-        var group = Assert.Single(vm.InputGroups);
+        var group = Assert.Single(vm.DigitalGroups);
         Assert.Equal("%MX801", group.AddressText);
         Assert.Equal("운전 지령", group.Label);
         Assert.True(group.IsWritable);
         Assert.Equal(1, group.BitCount);
         Assert.False(group.IsArray);
         Assert.Equal("OFF", group.ValueText);
-        Assert.True(vm.HasInputGroups);
+        Assert.True(vm.HasDigitalGroups);
         Assert.Null(vm.ErrorMessage);
 
         vm.Shutdown();
     }
 
     [AvaloniaFact]
-    public void AddingAnOutputPointCreatesARowInTheOutputList()
+    public void EveryPointIsBidirectionalRegardlessOfArea()
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
 
-        vm.NewOutputPointAddress = "%QX2000";
-        vm.AddOutputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%QX2000";
+        vm.AddDigitalPointCommand.Execute(null);
 
-        var group = Assert.Single(vm.OutputGroups);
-        Assert.False(group.IsInputMode);
-        // 출력도 직접 조작할 수 있다 — 시뮬레이터에서는 사람이 PLC 프로그램 역할을 한다.
+        var group = Assert.Single(vm.DigitalGroups);
+        // %Q 도 직접 조작할 수 있다 — 시뮬레이터에서는 사람이 PLC 프로그램 역할을 한다.
         Assert.True(group.IsWritable);
-        Assert.True(vm.HasOutputGroups);
-        Assert.Empty(vm.InputGroups);
+        Assert.True(vm.HasDigitalGroups);
 
         vm.Shutdown();
     }
@@ -70,9 +68,9 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewInputPointAddress = "%MX801";
-        vm.AddInputPointCommand.Execute(null);
-        var group = vm.InputGroups[0];
+        vm.NewDigitalAddress = "%MX801";
+        vm.AddDigitalPointCommand.Execute(null);
+        var group = vm.DigitalGroups[0];
 
         group.Bits[0].IsOn = true;
 
@@ -90,11 +88,11 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewOutputPointAddress = "%QX2000";
-        vm.AddOutputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%QX2000";
+        vm.AddDigitalPointCommand.Execute(null);
 
         // 마스터가 읽을 %Q 값을 사람이 만들 수 있어야 한다.
-        vm.OutputGroups[0].Bits[0].IsOn = true;
+        vm.DigitalGroups[0].Bits[0].IsOn = true;
 
         Assert.True(vm.Engine.Memory.ReadBit(IecAddress.Parse("%QX2000")));
         vm.Shutdown();
@@ -105,19 +103,19 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewInputPointAddress = "%MX801";
-        vm.AddInputPointCommand.Execute(null);
-        vm.NewOutputPointAddress = "%QX2000";
-        vm.AddOutputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MX801";
+        vm.AddDigitalPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%QX2000";
+        vm.AddDigitalPointCommand.Execute(null);
 
         // 마스터가 쓴 것을 모사 — 두 방향 모두 표시가 따라가야 한다.
         vm.Engine.Memory.WriteBit(IecAddress.Parse("%MX801"), true);
         vm.Engine.Memory.WriteBit(IecAddress.Parse("%QX2000"), true);
         vm.Refresh();
 
-        Assert.True(vm.InputGroups[0].Bits[0].IsOn);
-        Assert.True(vm.OutputGroups[0].Bits[0].IsOn);
-        Assert.Equal("ON", vm.OutputGroups[0].ValueText);
+        Assert.True(vm.DigitalGroups[0].Bits[0].IsOn);
+        Assert.True(vm.DigitalGroups[0].Bits[0].IsOn);
+        Assert.Equal("ON", vm.DigitalGroups[0].ValueText);
 
         vm.Shutdown();
     }
@@ -133,10 +131,10 @@ public class DigitalPointGroupSmokeTests
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
 
-        vm.NewInputPointAddress = address;
-        vm.AddInputPointCommand.Execute(null);
+        vm.NewDigitalAddress = address;
+        vm.AddDigitalPointCommand.Execute(null);
 
-        var group = Assert.Single(vm.InputGroups);
+        var group = Assert.Single(vm.DigitalGroups);
         Assert.Equal(expectedBits, group.BitCount);
         Assert.Equal(expectedBits, group.Bits.Count);
         Assert.Equal(expectedBits > 1, group.IsArray);
@@ -154,10 +152,10 @@ public class DigitalPointGroupSmokeTests
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
 
-        vm.NewInputPointAddress = address;
-        vm.AddInputPointCommand.Execute(null);
+        vm.NewDigitalAddress = address;
+        vm.AddDigitalPointCommand.Execute(null);
 
-        Assert.Empty(vm.InputGroups);
+        Assert.Empty(vm.DigitalGroups);
         Assert.NotNull(vm.ErrorMessage);
 
         vm.Shutdown();
@@ -168,9 +166,9 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewInputPointAddress = "%MW320";
-        vm.AddInputPointCommand.Execute(null);
-        var group = vm.InputGroups[0];
+        vm.NewDigitalAddress = "%MW320";
+        vm.AddDigitalPointCommand.Execute(null);
+        var group = vm.DigitalGroups[0];
 
         group.Bits[0].IsOn = true;
         group.Bits[1].IsOn = true;
@@ -185,9 +183,9 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewOutputPointAddress = "%MW900";
-        vm.AddOutputPointCommand.Execute(null);
-        var group = vm.OutputGroups[0];
+        vm.NewDigitalAddress = "%MW900";
+        vm.AddDigitalPointCommand.Execute(null);
+        var group = vm.DigitalGroups[0];
 
         vm.Engine.Memory.WriteScalar(IecAddress.Parse("%MW900"), 0b1000_0001_0000_0101);
         vm.Refresh();
@@ -207,9 +205,9 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewInputPointAddress = "%MW320";
-        vm.AddInputPointCommand.Execute(null);
-        var group = vm.InputGroups[0];
+        vm.NewDigitalAddress = "%MW320";
+        vm.AddDigitalPointCommand.Execute(null);
+        var group = vm.DigitalGroups[0];
 
         group.SetAllCommand.Execute(null);
         Assert.Equal(0xFFFFu, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW320")));
@@ -225,10 +223,10 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewOutputPointAddress = "%MW900";
-        vm.AddOutputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MW900";
+        vm.AddDigitalPointCommand.Execute(null);
 
-        vm.OutputGroups[0].SetAllCommand.Execute(null);
+        vm.DigitalGroups[0].SetAllCommand.Execute(null);
 
         Assert.Equal(0xFFFFu, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW900")));
         vm.Shutdown();
@@ -240,12 +238,12 @@ public class DigitalPointGroupSmokeTests
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
 
-        vm.NewInputPointAddress = "%MX801";
-        vm.AddInputPointCommand.Execute(null);
-        vm.NewInputPointAddress = "%MX801";
-        vm.AddInputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MX801";
+        vm.AddDigitalPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MX801";
+        vm.AddDigitalPointCommand.Execute(null);
 
-        Assert.Single(vm.InputGroups);
+        Assert.Single(vm.DigitalGroups);
         Assert.Contains("이미 목록에", vm.ErrorMessage!, StringComparison.Ordinal);
 
         vm.Shutdown();
@@ -256,18 +254,18 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewInputPointAddress = "%MX801";
-        vm.AddInputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MX801";
+        vm.AddDigitalPointCommand.Execute(null);
 
-        vm.InputGroups[0].RemoveCommand.Execute(null);
+        vm.DigitalGroups[0].RemoveCommand.Execute(null);
 
-        Assert.Empty(vm.InputGroups);
-        Assert.False(vm.HasInputGroups);
+        Assert.Empty(vm.DigitalGroups);
+        Assert.False(vm.HasDigitalGroups);
         vm.Shutdown();
     }
 
     [AvaloniaFact]
-    public void PointsSurviveProjectSaveAndReopenWithTheirDirection()
+    public void PointsSurviveProjectSaveAndReopen()
     {
         var dir = Directory.CreateTempSubdirectory("nxsim-dp-").FullName;
         try
@@ -276,13 +274,13 @@ public class DigitalPointGroupSmokeTests
             var vm = NewViewModel();
             new MainWindow { DataContext = vm }.Show();
 
-            vm.NewInputPointAddress = "%MX801";
-            vm.NewInputPointLabel = "운전 지령";
-            vm.AddInputPointCommand.Execute(null);
-            vm.NewOutputPointAddress = "%QX2000";
-            vm.NewOutputPointLabel = "운전 상태";
-            vm.AddOutputPointCommand.Execute(null);
-            vm.InputGroups[0].Bits[0].IsOn = true;
+            vm.NewDigitalAddress = "%MX801";
+            vm.NewDigitalLabel = "운전 지령";
+            vm.AddDigitalPointCommand.Execute(null);
+            vm.NewDigitalAddress = "%QX2000";
+            vm.NewDigitalLabel = "운전 상태";
+            vm.AddDigitalPointCommand.Execute(null);
+            vm.DigitalGroups[0].Bits[0].IsOn = true;
 
             vm.SaveProject(path);
             Assert.Null(vm.ErrorMessage);
@@ -293,13 +291,12 @@ public class DigitalPointGroupSmokeTests
             reopened.OpenProject(path);
 
             Assert.Null(reopened.ErrorMessage);
-            var input = Assert.Single(reopened.InputGroups);
-            var output = Assert.Single(reopened.OutputGroups);
+            Assert.Equal(2, reopened.DigitalGroups.Count);
+            var input = reopened.DigitalGroups[0];
+            var output = reopened.DigitalGroups[1];
             Assert.Equal("%MX801", input.AddressText);
             Assert.Equal("운전 지령", input.Label);
-            Assert.True(input.IsInputMode);
             Assert.Equal("%QX2000", output.AddressText);
-            Assert.False(output.IsInputMode);
             // 켜 둔 상태가 초기값으로 저장되어 복원된다.
             Assert.True(input.Bits[0].IsOn);
             reopened.Shutdown();
@@ -315,11 +312,11 @@ public class DigitalPointGroupSmokeTests
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewInputPointAddress = "%MX1200";
-        vm.AddInputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MX1200";
+        vm.AddDigitalPointCommand.Execute(null);
         await vm.ToggleServerCommand.ExecuteAsync(null);
 
-        var bit = vm.InputGroups[0].Bits[0];
+        var bit = vm.DigitalGroups[0].Bits[0];
 
         // 방향 1: UI 토글 → 메모리
         bit.IsOn = true;

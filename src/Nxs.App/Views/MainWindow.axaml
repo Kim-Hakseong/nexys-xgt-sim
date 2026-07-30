@@ -80,38 +80,38 @@
     <!-- 랙 패널 -->
     <TabControl Grid.Row="2">
 
-      <!-- 디지털 입력: 사용자가 지정한 주소를 토글 → 마스터가 읽는다 -->
-      <TabItem Header="디지털 입력">
+      <!-- 디지털 I/O: 하나의 목록, 모든 점이 양방향 -->
+      <TabItem Header="디지털 I/O">
         <Grid RowDefinitions="Auto,Auto,*">
           <Border Grid.Row="0" Classes="card" Padding="16" Margin="0,0,0,12">
             <StackPanel Spacing="8">
-              <TextBlock Classes="sectionTitle" Text="입력 점 주소 추가" />
+              <TextBlock Classes="sectionTitle" Text="디지털 주소 추가" />
               <TextBlock Classes="muted" TextWrapping="Wrap"
-                         Text="토글하면 즉시 메모리에 반영되어 마스터가 읽는다. 비트뿐 아니라 바이트·워드·더블워드 주소도 되고, 그 경우 폭만큼 비트 배열로 펼쳐진다.&#10;%MX801(1개) · %MB40(8개) · %MW320(16개) · %MD422(32개) · %ML50(64개)" />
+                         Text="모든 점이 양방향이다 — 비트를 눌러 쓰면 마스터가 읽고, 마스터가 쓰면 표시가 따라온다. 입력·출력을 나누지 않는다.&#10;비트뿐 아니라 바이트·워드·더블워드 주소도 되고, 그 경우 폭만큼 비트 배열로 펼쳐진다: %MX801(1개) · %MB40(8개) · %MW320(16개) · %MD422(32개) · %ML50(64개)" />
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <StackPanel Spacing="2">
                   <TextBlock Classes="fieldLabel" Text="주소" />
-                  <TextBox Classes="mono" Width="160" Text="{Binding NewInputPointAddress}"
-                           Watermark="%MW320" />
+                  <TextBox Classes="mono" Width="170" Text="{Binding NewDigitalAddress}"
+                           Watermark="%MW0" />
                 </StackPanel>
                 <StackPanel Spacing="2">
                   <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
-                  <TextBox Width="240" Text="{Binding NewInputPointLabel}" Watermark="운전 지령 워드" />
+                  <TextBox Width="260" Text="{Binding NewDigitalLabel}" Watermark="운전 지령 워드" />
                 </StackPanel>
-                <Button Classes="accent" Content="추가" Command="{Binding AddInputPointCommand}"
+                <Button Classes="accent" Content="추가" Command="{Binding AddDigitalPointCommand}"
                         VerticalAlignment="Bottom" />
               </StackPanel>
             </StackPanel>
           </Border>
 
           <Border Grid.Row="1" Classes="softCard" Padding="14" Margin="0,0,0,12"
-                  IsVisible="{Binding !HasInputGroups}">
+                  IsVisible="{Binding !HasDigitalGroups}">
             <TextBlock Classes="muted" TextWrapping="Wrap"
-                       Text="아직 입력 점이 없습니다. 위에 주소를 넣어 추가하면 토글할 수 있고, [프로젝트 저장] 하면 목록이 .nxp 에 함께 저장됩니다." />
+                       Text="아직 디지털 점이 없습니다. 마스터가 읽거나 쓰는 주소를 넣으면 비트를 눌러 조작하고 값 변화도 볼 수 있습니다. 목록은 .nxp 에 함께 저장됩니다." />
           </Border>
 
-          <ScrollViewer Grid.Row="2" IsVisible="{Binding HasInputGroups}">
-            <ItemsControl ItemsSource="{Binding InputGroups}">
+          <ScrollViewer Grid.Row="2" IsVisible="{Binding HasDigitalGroups}">
+            <ItemsControl ItemsSource="{Binding DigitalGroups}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="vm:DigitalPointGroupViewModel">
                   <Border Classes="card" Padding="18" Margin="0,0,0,12">
@@ -126,7 +126,8 @@
                             </Border>
                             <TextBlock Classes="mono" Text="{Binding ValueText}"
                                        VerticalAlignment="Center" FontSize="12" />
-                            <TextBlock Classes="muted" Text="{Binding Label}"
+                            <TextBlock Text="{Binding Label}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
                                        VerticalAlignment="Center" />
                           </StackPanel>
                           <TextBlock Text="{Binding Subtitle}" FontSize="11"
@@ -139,88 +140,6 @@
                           <Button Content="전체 OFF" Command="{Binding ClearAllCommand}" FontSize="12" />
                         </StackPanel>
                         <Button Grid.Column="2" ToolTip.Tip="이 항목 제거"
-                                Command="{Binding RemoveCommand}" VerticalAlignment="Center">
-                          <PathIcon Data="{StaticResource IconRemove}" />
-                        </Button>
-                      </Grid>
-
-                      <ItemsControl ItemsSource="{Binding Bits}">
-                        <ItemsControl.ItemsPanel>
-                          <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal" />
-                          </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate DataType="vm:DigitalPointViewModel">
-                            <ToggleButton Classes="point mono" Margin="0,0,6,6"
-                                          Content="{Binding PointLabel}"
-                                          IsChecked="{Binding IsOn}"
-                                          ToolTip.Tip="{Binding AddressText}" />
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                    </StackPanel>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-        </Grid>
-      </TabItem>
-
-      <!-- 디지털 출력: 마스터가 쓴 값을 LED로 표시 -->
-      <TabItem Header="디지털 출력">
-        <Grid RowDefinitions="Auto,Auto,*">
-          <Border Grid.Row="0" Classes="card" Padding="16" Margin="0,0,0,12">
-            <StackPanel Spacing="8">
-              <TextBlock Classes="sectionTitle" Text="출력 점 주소 추가" />
-              <TextBlock Classes="muted" TextWrapping="Wrap"
-                         Text="마스터가 쓴 값을 LED 로 본다. 직접 클릭해 켜고 끌 수도 있다 — 시뮬레이터에서는 사람이 PLC 프로그램 역할을 하므로 마스터가 읽을 %Q 값을 만들어야 한다. 워드 주소를 넣으면 16비트가 배열로 펼쳐진다.&#10;%QX2000 · %QW10 · %MW0 · %MD500" />
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <StackPanel Spacing="2">
-                  <TextBlock Classes="fieldLabel" Text="주소" />
-                  <TextBox Classes="mono" Width="160" Text="{Binding NewOutputPointAddress}"
-                           Watermark="%QW10" />
-                </StackPanel>
-                <StackPanel Spacing="2">
-                  <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
-                  <TextBox Width="240" Text="{Binding NewOutputPointLabel}" Watermark="운전 상태 워드" />
-                </StackPanel>
-                <Button Classes="accent" Content="추가" Command="{Binding AddOutputPointCommand}"
-                        VerticalAlignment="Bottom" />
-              </StackPanel>
-            </StackPanel>
-          </Border>
-
-          <Border Grid.Row="1" Classes="softCard" Padding="14" Margin="0,0,0,12"
-                  IsVisible="{Binding !HasOutputGroups}">
-            <TextBlock Classes="muted" TextWrapping="Wrap"
-                       Text="아직 출력 점이 없습니다. 마스터가 쓰는 주소를 넣으면 값 변화를 LED 로 보고 직접 조작할 수도 있습니다." />
-          </Border>
-
-          <ScrollViewer Grid.Row="2" IsVisible="{Binding HasOutputGroups}">
-            <ItemsControl ItemsSource="{Binding OutputGroups}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="vm:DigitalPointGroupViewModel">
-                  <Border Classes="card" Padding="18" Margin="0,0,0,12">
-                    <StackPanel Spacing="12">
-                      <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Grid.Column="0" Spacing="2">
-                          <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Classes="mono" Text="{Binding AddressText}"
-                                       FontWeight="SemiBold" FontSize="15" />
-                            <Border Classes="pill" Padding="7,3" VerticalAlignment="Center">
-                              <TextBlock Classes="mono" Text="{Binding SizeText}" FontSize="10" />
-                            </Border>
-                            <TextBlock Classes="mono" Text="{Binding ValueText}"
-                                       VerticalAlignment="Center" FontSize="12" />
-                            <TextBlock Classes="muted" Text="{Binding Label}"
-                                       VerticalAlignment="Center" />
-                          </StackPanel>
-                          <TextBlock Text="{Binding Subtitle}" FontSize="11"
-                                     Foreground="{StaticResource TextSecondaryBrush}" />
-                        </StackPanel>
-                        <Button Grid.Column="1" ToolTip.Tip="이 항목 제거"
                                 Command="{Binding RemoveCommand}" VerticalAlignment="Center">
                           <PathIcon Data="{StaticResource IconRemove}" />
                         </Button>

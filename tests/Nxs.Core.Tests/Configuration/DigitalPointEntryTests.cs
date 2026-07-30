@@ -130,9 +130,9 @@ public class DigitalPointEntryTests
             {
                 DigitalPoints =
                 [
-                    new DigitalPointEntry { Address = "%MX801", Label = "비트", Mode = DigitalPointMode.Input },
-                    new DigitalPointEntry { Address = "%MW320", Label = "워드", Mode = DigitalPointMode.Input },
-                    new DigitalPointEntry { Address = "%MD422", Label = "더블워드", Mode = DigitalPointMode.Output },
+                    new DigitalPointEntry { Address = "%MX801", Label = "비트" },
+                    new DigitalPointEntry { Address = "%MW320", Label = "워드" },
+                    new DigitalPointEntry { Address = "%MD422", Label = "더블워드" },
                 ],
             };
 
@@ -141,7 +141,7 @@ public class DigitalPointEntryTests
 
             Assert.Equal(3, loaded.DigitalPoints.Count);
             Assert.Equal("%MW320", loaded.DigitalPoints[1].Address);
-            Assert.Equal(DigitalPointMode.Output, loaded.DigitalPoints[2].Mode);
+            Assert.Equal("더블워드", loaded.DigitalPoints[2].Label);
             Assert.Equal(32, DigitalPointEntry.BitCountOf(loaded.DigitalPoints[2].Resolve()));
         }
         finally

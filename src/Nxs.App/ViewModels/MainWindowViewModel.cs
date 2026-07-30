@@ -91,17 +91,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>워치가 하나라도 있는지.</summary>
     public bool HasWatches => Watches.Count > 0;
 
-    /// <summary>사용자 지정 디지털 입력 그룹(토글).</summary>
-    public ObservableCollection<DigitalPointGroupViewModel> InputGroups { get; } = [];
+    /// <summary>
+    /// 사용자 지정 디지털 그룹. 입력/출력을 나누지 않는다 — 모든 점이 양방향이다.
+    /// </summary>
+    public ObservableCollection<DigitalPointGroupViewModel> DigitalGroups { get; } = [];
 
-    /// <summary>사용자 지정 디지털 출력 그룹(LED 감시).</summary>
-    public ObservableCollection<DigitalPointGroupViewModel> OutputGroups { get; } = [];
-
-    /// <summary>입력 그룹이 있는지.</summary>
-    public bool HasInputGroups => InputGroups.Count > 0;
-
-    /// <summary>출력 그룹이 있는지.</summary>
-    public bool HasOutputGroups => OutputGroups.Count > 0;
+    /// <summary>디지털 그룹이 있는지.</summary>
+    public bool HasDigitalGroups => DigitalGroups.Count > 0;
 
     /// <summary>사용자 지정 A/D 채널.</summary>
     public ObservableCollection<AnalogPointViewModel> AnalogPoints { get; } = [];
@@ -287,51 +283,34 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusMessage = $"워치 추가: {resolved.Text}";
     }
 
-    /// <summary>새 디지털 입력 점 주소.</summary>
+    /// <summary>새 디지털 점 주소.</summary>
     [ObservableProperty]
-    private string _newInputPointAddress = string.Empty;
+    private string _newDigitalAddress = string.Empty;
 
-    /// <summary>새 디지털 입력 점 별칭.</summary>
+    /// <summary>새 디지털 점 별칭.</summary>
     [ObservableProperty]
-    private string _newInputPointLabel = string.Empty;
+    private string _newDigitalLabel = string.Empty;
 
-    /// <summary>새 디지털 출력 점 주소.</summary>
-    [ObservableProperty]
-    private string _newOutputPointAddress = string.Empty;
-
-    /// <summary>새 디지털 출력 점 별칭.</summary>
-    [ObservableProperty]
-    private string _newOutputPointLabel = string.Empty;
-
-    /// <summary>디지털 입력 그룹을 추가한다.</summary>
+    /// <summary>디지털 그룹을 추가한다. 모든 점이 양방향이다.</summary>
     [RelayCommand]
-    private void AddInputPoint()
-        => AddDigitalPoint(NewInputPointAddress, NewInputPointLabel, DigitalPointMode.Input);
-
-    /// <summary>디지털 출력 그룹을 추가한다.</summary>
-    [RelayCommand]
-    private void AddOutputPoint()
-        => AddDigitalPoint(NewOutputPointAddress, NewOutputPointLabel, DigitalPointMode.Output);
-
-    private void AddDigitalPoint(string rawAddress, string label, DigitalPointMode mode)
+    private void AddDigitalPoint()
     {
         ErrorMessage = null;
-        var address = AddressInput.Normalize(rawAddress);
+        var address = AddressInput.Normalize(NewDigitalAddress);
 
         if (!DigitalPointEntry.IsValid(address))
         {
-            ErrorMessage = $"주소를 해석할 수 없습니다 — {AddressInput.Describe(rawAddress)}. " +
+            ErrorMessage = $"주소를 해석할 수 없습니다 — {AddressInput.Describe(NewDigitalAddress)}. " +
                 "형식: %<영역 I/Q/M><크기 X/B/W/D/L><번지> (예: %MX801 · %MB40 · %MW0 · %MD422)";
             return;
         }
 
-        var entry = new DigitalPointEntry { Address = address, Label = label.Trim(), Mode = mode };
+        var entry = new DigitalPointEntry { Address = address, Label = NewDigitalLabel.Trim() };
         var resolved = entry.Resolve(Engine.Io.Addressing);
-        var target = mode == DigitalPointMode.Input ? InputGroups : OutputGroups;
 
-        if (target.Any(p => p.Address.Area == resolved.Area
-            && p.Address.Size == resolved.Size
-            && p.Address.Offset == resolved.Offset))
+        if (DigitalGroups.Any(g => g.Address.Area == resolved.Area
+            && g.Address.Size == resolved.Size
+            && g.Address.Offset == resolved.Offset))
         {
             ErrorMessage = $"'{resolved.Text}' 는 이미 목록에 있습니다.";
             return;
@@ -349,24 +328,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        target.Add(group);
-
-        if (mode == DigitalPointMode.Input)
-        {
-            NewInputPointAddress = string.Empty;
-            NewInputPointLabel = string.Empty;
-        }
-        else
-        {
-            NewOutputPointAddress = string.Empty;
-            NewOutputPointLabel = string.Empty;
-        }
-
-        OnPropertyChanged(nameof(HasInputGroups));
-        OnPropertyChanged(nameof(HasOutputGroups));
+        DigitalGroups.Add(group);
+        NewDigitalAddress = string.Empty;
+        NewDigitalLabel = string.Empty;
+        OnPropertyChanged(nameof(HasDigitalGroups));
         StatusMessage = group.IsArray
-            ? $"{resolved.Text} 추가 — 비트 {group.BitCount}개로 펼쳤습니다"
-            : $"{resolved.Text} 추가 ({(mode == DigitalPointMode.Input ? "입력" : "출력")})";
+            ? $"{resolved.Text} 추가 — 비트 {group.BitCount}개로 펼쳤습니다 (양방향)"
+            : $"{resolved.Text} 추가 (양방향)";
+    }
+
+    /// <summary>디지털 그룹을 제거한다(그룹의 제거 커맨드가 호출한다).</summary>
+    public void RemoveDigitalPoint(DigitalPointGroupViewModel? group)
+    {
+        if (group is not null && DigitalGroups.Remove(group))
+        {
+            OnPropertyChanged(nameof(HasDigitalGroups));
+            StatusMessage = $"제거: {group.AddressText}";
+        }
     }
 
     /// <summary>새 A/D 채널 주소.</summary>
@@ -498,22 +476,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    /// <summary>디지털 그룹을 제거한다(그룹의 제거 커맨드가 호출한다).</summary>
-    public void RemoveDigitalPoint(DigitalPointGroupViewModel? group)
-    {
-        if (group is null)
-        {
-            return;
-        }
-
-        if (InputGroups.Remove(group) || OutputGroups.Remove(group))
-        {
-            OnPropertyChanged(nameof(HasInputGroups));
-            OnPropertyChanged(nameof(HasOutputGroups));
-            StatusMessage = $"제거: {group.AddressText}";
-        }
-    }
-
     /// <summary>워치 항목을 제거한다(행의 제거 커맨드가 호출한다).</summary>
     public void RemoveWatchRow(WatchRowViewModel? row)
     {
@@ -598,12 +560,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             watch.Refresh();
         }
 
-        foreach (var group in InputGroups)
-        {
-            group.Refresh();
-        }
-
-        foreach (var group in OutputGroups)
+        foreach (var group in DigitalGroups)
         {
             group.Refresh();
         }
@@ -658,7 +615,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        foreach (var bit in InputGroups.SelectMany(g => g.Bits).Where(b => b.IsOn))
+        foreach (var bit in DigitalGroups.SelectMany(g => g.Bits).Where(b => b.IsOn))
         {
             initial.Add(new InitialValue { Address = bit.AddressText, Value = 1 });
         }
@@ -686,7 +643,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 .Select(vm => AutomationRuleSettings.FromRule(vm.Rule with { IsEnabled = vm.IsEnabled }))
                 .ToArray(),
             Watches = Watches.Select(w => w.ToEntry()).ToArray(),
-            DigitalPoints = InputGroups.Concat(OutputGroups).Select(g => g.Entry).ToArray(),
+            DigitalPoints = DigitalGroups.Select(g => g.Entry).ToArray(),
             AnalogPoints = AnalogPoints.Select(p => p.ToEntry()).ToArray(),
         };
     }
@@ -763,15 +720,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        InputGroups.Clear();
-        OutputGroups.Clear();
+        DigitalGroups.Clear();
         foreach (var entry in project.DigitalPoints)
         {
             try
             {
-                var vm = new DigitalPointGroupViewModel(
-                    Engine.Memory, entry, project.Io.Addressing, RemoveDigitalPoint);
-                (entry.Mode == DigitalPointMode.Input ? InputGroups : OutputGroups).Add(vm);
+                DigitalGroups.Add(new DigitalPointGroupViewModel(
+                    Engine.Memory, entry, project.Io.Addressing, RemoveDigitalPoint));
             }
             catch (Exception ex) when (ex is FormatException or AddressRangeException
                 or InvalidOperationException)
@@ -796,8 +751,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasWatches));
-        OnPropertyChanged(nameof(HasInputGroups));
-        OnPropertyChanged(nameof(HasOutputGroups));
+        OnPropertyChanged(nameof(HasDigitalGroups));
         OnPropertyChanged(nameof(HasAnalogPoints));
         OnPropertyChanged(nameof(RackSummary));
         OnPropertyChanged(nameof(HasAutomationRules));

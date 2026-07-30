@@ -178,6 +178,30 @@ public class VisualTokenTests
     }
 
     [AvaloniaFact]
+    public void CheckedLedToggleKeepsReadableText()
+    {
+        // Fluent 는 checked ToggleButton 의 글자를 흰색으로 바꾼다. ledToggle 은 배경을 밝게 유지하므로
+        // 그대로 두면 비트 번호가 보이지 않는다 (실제로 그렇게 보였다).
+        var window = new Window();
+        var on = new ToggleButton { Classes = { "ledToggle" }, IsChecked = true, Content = "07" };
+        var off = new ToggleButton { Classes = { "ledToggle" }, IsChecked = false, Content = "08" };
+        window.Content = new StackPanel { Children = { on, off } };
+        window.Show();
+
+        var onPresenter = on.GetVisualDescendants().OfType<ContentPresenter>()
+            .First(p => string.Equals(p.Name, "PART_ContentPresenter", StringComparison.Ordinal));
+
+        var background = Assert.IsAssignableFrom<ISolidColorBrush>(onPresenter.Background).Color;
+        var foreground = Assert.IsAssignableFrom<ISolidColorBrush>(onPresenter.Foreground).Color;
+
+        Assert.Equal(Hex("#F1EFEA"), background);          // 밝은 배경 유지
+        Assert.Equal(Hex("#16171A"), foreground);          // 잉크색 글자 — 흰색이면 안 보인다
+        Assert.NotEqual(background, foreground);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void WindowUsesTheWarmNeutralGradientBackground()
     {
         var window = new MainWindow { DataContext = new MainWindowViewModel() };

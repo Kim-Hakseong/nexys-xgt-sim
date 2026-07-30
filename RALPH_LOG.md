@@ -509,3 +509,26 @@ Tests 473/473 (Core 280 + Integration 61 + App 132) · 빌드 경고0/에러0
   폴링하며 쓰는 상황에서는 실제로 입력이 불가능해진다. 마지막 키 입력 후 1.5초는 사용자에게
   우선권을 준다(워치·A/D 행 모두).
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)
+
+## M15 — 디지털 입력/출력 통합 (사용자 지시) · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Configuration/{DigitalPointEntry,NxpProject}.cs,
+  src/Nxs.App/ViewModels/{DigitalPointGroupViewModel,MainWindowViewModel}.cs,
+  src/Nxs.App/{App.axaml,Views/MainWindow.axaml}, tools/Nxs.DocShots/Program.cs, README.md,
+  tests/Nxs.App.Tests/{DigitalPointGroupSmokeTests,TabRenderTests,LowAddressAndEditingTests,VisualTokenTests}.cs,
+  tests/Nxs.Core.Tests/Configuration/DigitalPointEntryTests.cs,
+  tests/Nxs.Integration.Tests/XgtFenetEndToEndTests.cs
+Tests 474/474 (Core 280 + Integration 61 + App 133) · 빌드 경고0/에러0
+
+[결정] **디지털 입력·출력 탭을 하나로 합쳤다("디지털 I/O").** M14 에서 출력도 쓰기 가능하게 만든 뒤로
+  두 탭의 차이는 표시 방식뿐이었다 — 나눠 둘 근거가 사라졌다. DigitalPointMode 열거형과 Mode 속성을
+  제거해 모델도 단순해졌다. 기존 .nxp 의 `"mode": "Input"` 키는 System.Text.Json 이 무시하므로 그대로 열린다.
+[결정] 비트 표시를 LED + 번호 토글(ledToggle)로 통일했다. LED 는 상태를 즉시 읽히게 하고
+  토글 버튼은 누를 수 있음을 알린다 — 양방향이라는 성격에 맞는 단일 표현이다.
+[버그 수정] **켜진 비트의 번호가 보이지 않았다.** Fluent 가 checked ToggleButton 의 Foreground 를
+  흰색(#FFFFFF)으로 바꾸는데 ledToggle 은 배경을 밝은 CardSoft 로 유지하므로 흰 글자가 사실상 사라졌다.
+  스크린샷을 눈으로 검토해 발견. checked 상태에서 Foreground 를 잉크색으로 되돌리고 테두리를 와인레드로
+  주어 켜짐을 이중으로 표시했다. 대비 회귀 테스트(CheckedLedToggleKeepsReadableText)로 고정.
+[확인] RestartAfterStopBindsAgain 이 전체 실행에서 1회 실패했으나 단독 2회 통과 — 포트 재사용 플레이키이며
+  이번 변경과 무관하다(서버 코드 미수정). 기록만 남긴다.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)

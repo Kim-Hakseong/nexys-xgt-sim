@@ -96,7 +96,7 @@ public sealed record NxpProject
     public IReadOnlyList<WatchEntry> Watches { get; init; } = [];
 
     /// <summary>
-    /// 사용자 지정 디지털 점 — 랙 매핑 밖의 임의 비트 주소를 토글(입력)하거나 감시(출력)한다.
+    /// 사용자 지정 디지털 점 — 임의 주소를 비트 배열로 펼쳐 양방향으로 읽고 쓴다.
     /// </summary>
     public IReadOnlyList<DigitalPointEntry> DigitalPoints { get; init; } = [];
 

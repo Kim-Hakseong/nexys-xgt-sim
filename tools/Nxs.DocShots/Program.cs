@@ -28,10 +28,9 @@ public static class Program
 {
     private static readonly (int Index, string Name)[] Tabs =
     [
-        (0, "01-digital-input"),
-        (1, "02-digital-output"),
-        (2, "03-analog-input"),
-        (3, "04-watch"),
+        (0, "01-digital-io"),
+        (1, "02-analog-input"),
+        (2, "03-watch"),
     ];
 
     public static int Main(string[] args)
@@ -160,20 +159,20 @@ public static class Program
         Settle(window);
 
         var tabControl = window.GetLogicalDescendants().OfType<TabControl>().First();
-        tabControl.SelectedIndex = 4;
+        tabControl.SelectedIndex = 3;
         Settle(window);
 
-        var path = Path.Combine(outputDirectory, "05-traffic-log.png");
+        var path = Path.Combine(outputDirectory, "04-traffic-log.png");
         using var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {
-            Console.Error.WriteLine("렌더 실패: 05-traffic-log");
+            Console.Error.WriteLine("렌더 실패: 04-traffic-log");
             viewModel.Shutdown();
             return false;
         }
 
         frame.Save(path);
-        Console.WriteLine($"05-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
+        Console.WriteLine($"04-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
         viewModel.Shutdown();
         return true;
     }
@@ -299,33 +298,32 @@ public static class Program
             ("%MW320", "운전 지령 워드"), ("%MX901", "리셋 요청"), ("%MB40", "모드 선택"),
         })
         {
-            viewModel.NewInputPointAddress = address;
-            viewModel.NewInputPointLabel = label;
-            viewModel.AddInputPointCommand.Execute(null);
+            viewModel.NewDigitalAddress = address;
+            viewModel.NewDigitalLabel = label;
+            viewModel.AddDigitalPointCommand.Execute(null);
         }
 
         // 워드 그룹의 몇 비트를 켜 배열 표시를 보여준다
         foreach (var i in new[] { 0, 1, 3, 7, 8, 12, 15 })
         {
-            viewModel.InputGroups[0].Bits[i].IsOn = true;
+            viewModel.DigitalGroups[0].Bits[i].IsOn = true;
         }
 
-        viewModel.InputGroups[0].Bits[0].IsOn = true;
-        viewModel.InputGroups[2].Bits[0].IsOn = true;
+        viewModel.DigitalGroups[0].Bits[0].IsOn = true;
+        viewModel.DigitalGroups[2].Bits[0].IsOn = true;
 
         foreach (var (address, label) in new[]
         {
-            ("%QW10", "운전 상태 워드"), ("%QX2001", "경보 출력"),
+            ("%QW10", "운전 상태 워드 (마스터가 씀)"),
         })
         {
-            viewModel.NewOutputPointAddress = address;
-            viewModel.NewOutputPointLabel = label;
-            viewModel.AddOutputPointCommand.Execute(null);
+            viewModel.NewDigitalAddress = address;
+            viewModel.NewDigitalLabel = label;
+            viewModel.AddDigitalPointCommand.Execute(null);
         }
 
-        // 마스터가 쓴 상태 모사
+        // 마스터가 쓴 상태 모사 — 같은 목록에서 함께 보인다
         viewModel.Engine.Memory.WriteScalar(IecAddress.Parse("%QW10"), 0b1000_0001_0010_0101);
-        viewModel.Engine.Memory.WriteBit(IecAddress.Parse("%QX2001"), true);
         viewModel.Refresh();
 
         // 입력 점: 결정적 패턴 (3의 배수 ON)

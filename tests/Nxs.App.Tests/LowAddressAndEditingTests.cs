@@ -85,12 +85,11 @@ public class LowAddressAndEditingTests
         // 시뮬레이터에서는 사람이 PLC 프로그램 역할을 하므로 %Q 도 직접 켤 수 있어야 한다.
         var vm = New();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewOutputPointAddress = "%QW10";
-        vm.AddOutputPointCommand.Execute(null);
-        var group = vm.OutputGroups[0];
+        vm.NewDigitalAddress = "%QW10";
+        vm.AddDigitalPointCommand.Execute(null);
+        var group = vm.DigitalGroups[0];
 
         Assert.True(group.IsWritable);
-        Assert.False(group.IsInputMode);
 
         group.Bits[3].IsOn = true;
         Assert.True(vm.Engine.Memory.ReadBit(group.Bits[3].Address));
@@ -105,10 +104,10 @@ public class LowAddressAndEditingTests
     {
         var vm = New();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewOutputPointAddress = "%QW10";
-        vm.AddOutputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%QW10";
+        vm.AddDigitalPointCommand.Execute(null);
 
-        vm.OutputGroups[0].SetAllCommand.Execute(null);
+        vm.DigitalGroups[0].SetAllCommand.Execute(null);
 
         Assert.Equal(0xFFFFu, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%QW10")));
         vm.Shutdown();
@@ -173,11 +172,11 @@ public class LowAddressAndEditingTests
     {
         var vm = New();
         new MainWindow { DataContext = vm }.Show();
-        vm.NewInputPointAddress = "%MW0";
-        vm.AddInputPointCommand.Execute(null);
+        vm.NewDigitalAddress = "%MW0";
+        vm.AddDigitalPointCommand.Execute(null);
 
         Assert.Null(vm.ErrorMessage);
-        var group = Assert.Single(vm.InputGroups);
+        var group = Assert.Single(vm.DigitalGroups);
         group.Bits[0].IsOn = true;
         group.Bits[15].IsOn = true;
 

@@ -3,19 +3,6 @@ using Nxs.Core.Memory;
 
 namespace Nxs.Core.Configuration;
 
-/// <summary>사용자 지정 디지털 점의 동작 방향.</summary>
-public enum DigitalPointMode
-{
-    /// <summary>
-    /// 입력 — 사용자가 토글하면 메모리에 쓴다. 마스터가 읽어 확인한다.
-    /// 외부에서 값이 바뀌면 표시도 따라간다(양방향 확인).
-    /// </summary>
-    Input,
-
-    /// <summary>출력 — 마스터가 쓴 값을 LED 로 표시만 한다. 사용자 조작 불가.</summary>
-    Output,
-}
-
 /// <summary>
 /// 사용자 지정 디지털 점 — 임의 주소의 비트를 토글하거나 감시한다.
 /// </summary>
@@ -26,8 +13,9 @@ public enum DigitalPointMode
 /// (<c>%MB</c>=8 · <c>%MW</c>=16 · <c>%MD</c>=32 · <c>%ML</c>=64개).
 /// </para>
 /// <para>
-/// 입력 모드로 넣으면 토글 → 마스터 읽기, 출력 모드로 넣으면 마스터 쓰기 → LED 확인이 되어
-/// **불리언 ON/OFF 를 양방향으로 검증**할 수 있다.
+/// **모든 점은 양방향이다.** 사용자가 토글하면 메모리에 써서 마스터가 읽고, 마스터가 쓰면
+/// 표시가 따라온다. 입력/출력을 나누지 않는다 — 시뮬레이터에서는 사람이 PLC 프로그램 역할까지
+/// 하므로 %I·%Q·%M 어느 영역이든 양쪽 방향이 다 필요하다.
 /// </para>
 /// </remarks>
 public sealed record DigitalPointEntry
@@ -39,9 +27,6 @@ public sealed record DigitalPointEntry
 
     /// <summary>사용자 별칭.</summary>
     public string Label { get; init; } = string.Empty;
-
-    /// <summary>동작 방향.</summary>
-    public DigitalPointMode Mode { get; init; } = DigitalPointMode.Input;
 
     /// <summary>주소를 해석한다.</summary>
     /// <exception cref="FormatException">표기가 올바르지 않을 때.</exception>

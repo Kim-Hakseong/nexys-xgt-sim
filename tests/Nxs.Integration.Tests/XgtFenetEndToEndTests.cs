@@ -414,7 +414,7 @@ public class XgtFenetEndToEndTests : IAsyncLifetime
     public async Task CustomDigitalPointIsVerifiableInBothDirections()
     {
         // 사용자 지정 비트: 사용자가 켜면 마스터가 읽고, 마스터가 쓰면 사용자가 본다.
-        var entry = new DigitalPointEntry { Address = "%MX1500", Mode = DigitalPointMode.Input };
+        var entry = new DigitalPointEntry { Address = "%MX1500" };
         var address = entry.Resolve();
         await using var master = await XgtMaster.ConnectAsync(_port);
 

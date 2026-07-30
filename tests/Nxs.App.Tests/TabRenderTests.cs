@@ -73,8 +73,8 @@ public class TabRenderTests
             ],
             DigitalPoints =
             [
-                new DigitalPointEntry { Address = "%MX900", Label = "운전 지령", Mode = DigitalPointMode.Input },
-                new DigitalPointEntry { Address = "%QX2000", Label = "운전 상태", Mode = DigitalPointMode.Output },
+                new DigitalPointEntry { Address = "%MX900", Label = "운전 지령" },
+                new DigitalPointEntry { Address = "%QX2000", Label = "운전 상태" },
             ],
         };
 
@@ -91,7 +91,7 @@ public class TabRenderTests
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
         var tabCount = tabControl.ItemCount;
-        Assert.Equal(5, tabCount);
+        Assert.Equal(4, tabCount);
 
         for (var i = 0; i < tabCount; i++)
         {
@@ -117,7 +117,7 @@ public class TabRenderTests
         window.Show();
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
-        tabControl.SelectedIndex = 3;   // 주소 워치
+        tabControl.SelectedIndex = 2;   // 주소 워치
         Dispatcher.UIThread.RunJobs();
         window.Measure(new Avalonia.Size(window.Width, window.Height));
         window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
@@ -145,28 +145,28 @@ public class TabRenderTests
     }
 
     [AvaloniaFact]
-    public void DigitalTabsRealiseTheirCustomPointRows()
+    public void MergedDigitalTabRealisesEveryPointRow()
     {
         var vm = BuildPopulatedViewModel();
         var window = new MainWindow { DataContext = vm, Width = 1240, Height = 860 };
         window.Show();
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
 
-        foreach (var (index, address) in new[] { (0, "%MX900"), (1, "%QX2000") })
-        {
-            tabControl.SelectedIndex = index;
-            Dispatcher.UIThread.RunJobs();
-            window.Measure(new Avalonia.Size(window.Width, window.Height));
-            window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
-            Dispatcher.UIThread.RunJobs();
+        tabControl.SelectedIndex = 0;   // 디지털 I/O
+        Dispatcher.UIThread.RunJobs();
+        window.Measure(new Avalonia.Size(window.Width, window.Height));
+        window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
+        Dispatcher.UIThread.RunJobs();
 
-            var texts = window.GetVisualDescendants().OfType<TextBlock>()
-                .Select(t => t.Text ?? string.Empty).ToList();
-            Assert.Contains(address, texts);
-        }
+        var texts = window.GetVisualDescendants().OfType<TextBlock>()
+            .Select(t => t.Text ?? string.Empty).ToList();
 
-        Assert.Single(vm.InputGroups);
-        Assert.Single(vm.OutputGroups);
+        // 입력·출력이 한 목록에 함께 있다.
+        Assert.Contains("%MX900", texts);
+        Assert.Contains("%QX2000", texts);
+        Assert.Equal(2, vm.DigitalGroups.Count);
+        Assert.All(vm.DigitalGroups, g => Assert.True(g.IsWritable));
+
         vm.Shutdown();
     }
 
@@ -178,7 +178,7 @@ public class TabRenderTests
         window.Show();
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
 
-        tabControl.SelectedIndex = 2;   // A/D 입력
+        tabControl.SelectedIndex = 1;   // A/D 입력
         Dispatcher.UIThread.RunJobs();
         window.Measure(new Avalonia.Size(window.Width, window.Height));
         window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
@@ -194,7 +194,7 @@ public class TabRenderTests
     }
 
     [AvaloniaFact]
-    public void OnlyTheFiveWorkingTabsRemain()
+    public void OnlyTheFourWorkingTabsRemain()
     {
         var vm = BuildPopulatedViewModel();
         var window = new MainWindow { DataContext = vm, Width = 1240, Height = 860 };
@@ -205,10 +205,13 @@ public class TabRenderTests
             .Select(t => t.Header?.ToString() ?? string.Empty).ToList();
 
         Assert.Equal(
-            new[] { "디지털 입력", "디지털 출력", "A/D 입력", "주소 워치", "트래픽 로그" },
+            new[] { "디지털 I/O", "A/D 입력", "주소 워치", "트래픽 로그" },
             headers);
         Assert.DoesNotContain("값 자동화", headers);
         Assert.DoesNotContain("랙 구성", headers);
+        // 입력/출력은 하나로 합쳐졌다 — 모든 점이 양방향이다.
+        Assert.DoesNotContain("디지털 입력", headers);
+        Assert.DoesNotContain("디지털 출력", headers);
 
         vm.Shutdown();
     }

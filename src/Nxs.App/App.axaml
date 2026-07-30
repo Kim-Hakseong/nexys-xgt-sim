@@ -319,6 +319,21 @@
     </Style>
     <Style Selector="ToggleButton.ledToggle:checked /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource CardSoftBrush}" />
+      <!-- Fluent 는 checked 에서 글자를 흰색으로 바꾼다. 배경이 밝은 채로 남으므로
+           흰 글자는 사실상 보이지 않는다 — 비트 번호를 읽을 수 있게 잉크색으로 되돌린다. -->
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.ledToggle:checked">
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.ledToggle:checked TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.ledToggle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
     </Style>
 
     <!-- 출력 LED: ON = 와인레드 채움, OFF = LineBrush 테두리 빈 원 -->
