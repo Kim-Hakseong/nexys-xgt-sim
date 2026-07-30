@@ -303,6 +303,24 @@
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
+    <!-- 출력 LED 토글: LED 모양을 유지하면서 클릭으로 강제 설정도 가능하게 한다.
+         시뮬레이터에서는 사람이 PLC 프로그램 역할을 해야 하므로 %Q 도 직접 켤 수 있어야 한다. -->
+    <Style Selector="ToggleButton.ledToggle">
+      <Setter Property="Background" Value="{StaticResource CardSoftBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Width" Value="52" />
+      <Setter Property="Padding" Value="0,8" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.ledToggle /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource CardSoftBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.ledToggle:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource CardSoftBrush}" />
+    </Style>
+
     <!-- 출력 LED: ON = 와인레드 채움, OFF = LineBrush 테두리 빈 원 -->
     <Style Selector="Ellipse.led">
       <Setter Property="Width" Value="16" />

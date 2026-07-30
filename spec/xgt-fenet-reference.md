@@ -108,16 +108,23 @@ uint16 LE  DataCount        읽을 바이트 수
 ```
 
 ### 개별 쓰기 요청 (`0x0058`, 타입 ≠ `0x0014`)
-신뢰도: **낮음** — 이름과 데이터의 배치 순서가 불확실
+신뢰도: **해소** — 값 구간 배치를 프레임 길이로 판별하므로 더 이상 가정이 필요 없다
 ```
 uint16 LE  Command = 0x0058, DataType, Reserved = 0x0000, BlockCount
   [묶음(Grouped) 가정 — 본 구현 기본]
     BlockCount 회: uint16 LE VarNameLength, ASCII VarName
     BlockCount 회: uint16 LE DataSize,      bytes Data
 ```
-> **⚠️ BlockCount = 1 이면 묶음/교차(Interleaved) 두 해석이 바이트열로 완전히 동일하다.**
-> 대부분의 마스터는 1블록만 쓰므로 실용적 위험은 낮다. 2블록 이상 쓰기를 쓰는 경우를 위해
-> `XgtFenetOptions.WriteBlockLayout` 설정으로 교차 배치를 선택할 수 있게 했다.
+> **값 구간에 블록별 크기 필드가 있는지 없는지가 원래 불확실했다** — 그리고 이것이 실제로
+> "LabVIEW 에서 쓰기가 안 된다" 의 원인이었다. 크기 필드가 없는 프레임을 받으면 값의 앞 2바이트를
+> 길이로 오독해 해석 실패로 거절했다.
+>
+> **이제 프레임 길이로 판별한다.** 헤더의 Length 필드가 데이터부 크기를 정확히 주므로
+> 남은 바이트 수가 `N × (2 + 요소크기)` 면 크기 필드 있음, `N × 요소크기` 면 없음으로 확정된다
+> (두 값은 절대 같을 수 없다). 추측이 사라졌다.
+>
+> BlockCount = 1 이면 묶음/교차(Interleaved) 두 해석은 바이트열이 동일하다.
+> 2블록 이상 교차 배치를 쓰는 마스터를 위해 `XgtFenetOptions.WriteBlockLayout` 설정은 남겨 둔다.
 
 ### 연속 쓰기 요청 (`0x0058`, 타입 `0x0014`)
 신뢰도: **중간**

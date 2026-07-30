@@ -208,9 +208,28 @@ public sealed class XgtFenetCodec : IFrameCodec
                 names.Add(text);
             }
 
+            // 값 구간의 배치를 **프레임 길이로 판별**한다 — 추측하지 않는다.
+            //   배치 A: 블록마다 [DataSize(2) + Data(S)]  → 남은 바이트 = N × (2 + S)
+            //   배치 B: 크기 필드 없이 [Data(S)]          → 남은 바이트 = N × S
+            // 헤더의 Length 필드가 데이터부 크기를 정확히 주므로 산술로 구분된다.
+            // (초안 §3 에서 이 배치가 신뢰도 '낮음' 이었던 부분 — 이제 프레임이 스스로 알려준다.)
+            var elementSize = ElementSize(dataType);
+            var remaining = data.Length - cursor;
+            var withSizeField = ChooseValueLayout(remaining, blockCount, elementSize);
+
+            if (withSizeField is null)
+            {
+                return Reject(header, CmdWriteResponse, dataType, PlcErrorReason.DataSizeMismatch,
+                    $"쓰기 값 구간 길이 {remaining}바이트가 블록 {blockCount}개 × 요소 {elementSize}바이트와 "
+                    + $"맞지 않습니다 (크기필드 있음={blockCount * (2 + elementSize)} / "
+                    + $"없음={blockCount * elementSize})");
+            }
+
             for (var i = 0; i < blockCount; i++)
             {
-                var value = ReadValue(data, ref cursor);
+                var value = withSizeField.Value
+                    ? ReadValue(data, ref cursor)
+                    : ReadFixedValue(data, ref cursor, elementSize);
                 items.Add(new PlcWriteItem(addresses[i], value));
                 summaries.Add($"{names[i]}={Hex.Format(value)}");
             }
@@ -237,6 +256,62 @@ public sealed class XgtFenetCodec : IFrameCodec
         var value = data.Slice(cursor, size).ToArray();
         cursor += size;
         return value;
+    }
+
+    /// <summary>크기 필드 없이 고정 폭 값을 읽는다.</summary>
+    private static byte[] ReadFixedValue(ReadOnlySpan<byte> data, ref int cursor, int size)
+    {
+        var value = data.Slice(cursor, size).ToArray();
+        cursor += size;
+        return value;
+    }
+
+    /// <summary>데이터 타입 코드가 뜻하는 요소 바이트 수.</summary>
+    private static int ElementSize(ushort dataType) => dataType switch
+    {
+        TypeBit => 1,
+        TypeByte => 1,
+        TypeWord => 2,
+        TypeDWord => 4,
+        TypeLWord => 8,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// 값 구간 길이로 배치를 판별한다. 판별 불가면 null.
+    /// </summary>
+    /// <remarks>
+    /// 두 후보가 같은 길이를 낼 수는 없다(2 &gt; 0 이므로). 따라서 길이가 맞는 쪽이 유일한 해다.
+    /// 어느 쪽과도 정확히 맞지 않으면 크기 필드가 있는 배치를 우선 시도하되,
+    /// 그 길이보다 짧으면 실패로 본다 — 조용히 오독하는 것보다 정확히 거절하는 편이 낫다.
+    /// </remarks>
+    private static bool? ChooseValueLayout(int remaining, int blockCount, int elementSize)
+    {
+        if (blockCount <= 0 || elementSize <= 0)
+        {
+            return null;
+        }
+
+        var withSize = blockCount * (2 + elementSize);
+        var withoutSize = blockCount * elementSize;
+
+        if (remaining == withSize)
+        {
+            return true;
+        }
+
+        if (remaining == withoutSize)
+        {
+            return false;
+        }
+
+        // 패딩이 붙은 프레임을 만나도 동작하도록 관용적으로 처리한다.
+        if (remaining > withSize)
+        {
+            return true;
+        }
+
+        return remaining > withoutSize ? false : null;
     }
 
     private static bool IsScalarType(ushort dataType)

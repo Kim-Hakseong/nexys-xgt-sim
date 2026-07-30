@@ -175,7 +175,7 @@
             <StackPanel Spacing="8">
               <TextBlock Classes="sectionTitle" Text="출력 점 주소 추가" />
               <TextBlock Classes="muted" TextWrapping="Wrap"
-                         Text="마스터가 쓰는 값을 감시한다. 사용자 조작은 되지 않고 변화만 LED 로 표시한다. 워드 주소를 넣으면 16비트가 배열로 펼쳐진다.&#10;%QX2000 · %QW10 · %MW900 · %MD500" />
+                         Text="마스터가 쓴 값을 LED 로 본다. 직접 클릭해 켜고 끌 수도 있다 — 시뮬레이터에서는 사람이 PLC 프로그램 역할을 하므로 마스터가 읽을 %Q 값을 만들어야 한다. 워드 주소를 넣으면 16비트가 배열로 펼쳐진다.&#10;%QX2000 · %QW10 · %MW0 · %MD500" />
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <StackPanel Spacing="2">
                   <TextBlock Classes="fieldLabel" Text="주소" />
@@ -195,7 +195,7 @@
           <Border Grid.Row="1" Classes="softCard" Padding="14" Margin="0,0,0,12"
                   IsVisible="{Binding !HasOutputGroups}">
             <TextBlock Classes="muted" TextWrapping="Wrap"
-                       Text="아직 출력 점이 없습니다. 위에 마스터가 쓰는 주소를 넣으면 값 변화를 LED 로 볼 수 있습니다." />
+                       Text="아직 출력 점이 없습니다. 마스터가 쓰는 주소를 넣으면 값 변화를 LED 로 보고 직접 조작할 수도 있습니다." />
           </Border>
 
           <ScrollViewer Grid.Row="2" IsVisible="{Binding HasOutputGroups}">
@@ -234,14 +234,15 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                           <DataTemplate DataType="vm:DigitalPointViewModel">
-                            <Border Classes="softCard" Width="52" Padding="0,8" Margin="0,0,6,6">
+                            <ToggleButton Classes="ledToggle" Margin="0,0,6,6"
+                                          IsChecked="{Binding IsOn}"
+                                          ToolTip.Tip="{Binding AddressText}">
                               <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                <Ellipse Classes="led" Classes.on="{Binding IsOn}"
-                                         ToolTip.Tip="{Binding AddressText}" />
+                                <Ellipse Classes="led" Classes.on="{Binding IsOn}" />
                                 <TextBlock Classes="mono" Text="{Binding PointLabel}"
                                            HorizontalAlignment="Center" FontSize="11" />
                               </StackPanel>
-                            </Border>
+                            </ToggleButton>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>

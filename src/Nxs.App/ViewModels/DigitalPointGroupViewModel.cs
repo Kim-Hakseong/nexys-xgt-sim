@@ -36,11 +36,13 @@ public sealed partial class DigitalPointGroupViewModel : ObservableObject
         Address = entry.Resolve(addressing);
         BitCount = DigitalPointEntry.BitCountOf(Address);
 
-        var writable = entry.Mode == DigitalPointMode.Input;
+        // 입력·출력 모두 사용자가 직접 켤 수 있다.
+        // 출력을 감시 전용으로 두면 "마스터가 이 값을 읽었을 때 어떻게 되는지" 를 시험할 방법이 없다 —
+        // 실장비에서는 PLC 프로그램이 %Q 를 쓰지만 시뮬레이터에서는 사람이 그 역할을 해야 한다.
         for (var i = 0; i < BitCount; i++)
         {
             Bits.Add(new DigitalPointViewModel(
-                memory, DigitalPointEntry.BitAddressOf(Address, i), i, writable));
+                memory, DigitalPointEntry.BitAddressOf(Address, i), i, writable: true));
         }
     }
 
@@ -65,8 +67,17 @@ public sealed partial class DigitalPointGroupViewModel : ObservableObject
     /// <summary>동작 방향.</summary>
     public DigitalPointMode Mode => Entry.Mode;
 
-    /// <summary>사용자가 토글할 수 있는지 (입력 모드만).</summary>
-    public bool IsWritable => Entry.Mode == DigitalPointMode.Input;
+    /// <summary>
+    /// 사용자가 토글할 수 있는지. **입력·출력 모두 참이다.**
+    /// </summary>
+    /// <remarks>
+    /// 출력을 감시 전용으로 두면 마스터가 읽을 %Q 값을 만들 방법이 없다.
+    /// 두 모드의 차이는 표시 방식(토글 버튼 vs LED)과 관용적 용도뿐이다.
+    /// </remarks>
+    public bool IsWritable => true;
+
+    /// <summary>입력 모드인지(토글 버튼으로 표시).</summary>
+    public bool IsInputMode => Entry.Mode == DigitalPointMode.Input;
 
     /// <summary>크기 배지.</summary>
     public string SizeText => Address.Size switch
@@ -89,7 +100,7 @@ public sealed partial class DigitalPointGroupViewModel : ObservableObject
         {
             if (!IsArray)
             {
-                return IsWritable ? "비트 1개 · 토글" : "비트 1개 · 감시";
+                return IsInputMode ? "비트 1개 · 토글" : "비트 1개 · 마스터가 쓰는 값 (직접 조작도 가능)";
             }
 
             var first = Bits[0].AddressText;
@@ -127,11 +138,6 @@ public sealed partial class DigitalPointGroupViewModel : ObservableObject
 
     private void SetEveryBit(bool value)
     {
-        if (!IsWritable)
-        {
-            return;
-        }
-
         foreach (var bit in Bits)
         {
             bit.IsOn = value;

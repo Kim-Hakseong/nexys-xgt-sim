@@ -14,9 +14,20 @@ namespace Nxs.App.ViewModels;
 /// </remarks>
 public sealed partial class WatchRowViewModel : ObservableObject
 {
+    /// <summary>
+    /// 사용자 입력 직후 주기 갱신을 보류하는 시간.
+    /// </summary>
+    /// <remarks>
+    /// 200ms 타이머가 <see cref="ValueText"/> 를 다시 쓰면 TextBox 의 캐럿이 튀어 타이핑이 끊긴다.
+    /// 마스터가 같은 주소를 폴링하며 쓰는 경우 실제로 입력이 불가능해진다 —
+    /// 마지막 키 입력 후 잠깐은 사용자 쪽에 우선권을 준다.
+    /// </remarks>
+    private static readonly TimeSpan EditGrace = TimeSpan.FromMilliseconds(1500);
+
     private readonly PlcMemory _memory;
     private readonly Action<WatchRowViewModel>? _onRemove;
     private bool _updating;
+    private DateTime _lastUserEditUtc = DateTime.MinValue;
 
     /// <summary>
     /// 현재 표시 중인 바이트. <see cref="Refresh"/>가 **외부 변경만** 반영하게 하는 기준이다
@@ -137,6 +148,12 @@ public sealed partial class WatchRowViewModel : ObservableObject
     /// <summary>메모리가 외부에서 바뀐 경우에만 표시를 갱신한다.</summary>
     public void Refresh()
     {
+        // 사용자가 방금 입력했다면 표시를 건드리지 않는다 (캐럿 보호).
+        if (DateTime.UtcNow - _lastUserEditUtc < EditGrace)
+        {
+            return;
+        }
+
         var raw = _memory.ReadRaw(Address);
         if (raw.AsSpan().SequenceEqual(_displayed))
         {
@@ -215,6 +232,8 @@ public sealed partial class WatchRowViewModel : ObservableObject
         {
             return;
         }
+
+        _lastUserEditUtc = DateTime.UtcNow;
 
         var bytes = WatchValue.Parse(value, Address.ByteLength, Format, Order);
         if (bytes is null)

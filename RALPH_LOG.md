@@ -476,3 +476,36 @@ Tests 424/424 (Core 250 + Integration 61 + App 113) · 빌드 경고0/에러0
 [검증] 스케일 변환을 스크린샷으로 실측 대조: 6.25/10×4000=2500 · 132.5/250×4000=2120 · 1850/4000×400=185.
   전 탭 렌더 테스트에 A/D 탭 실체화 검사 추가.
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)
+
+## M14 — LabVIEW 쓰기 실패 원인 해소 + 주소 입력 정규화 · 2026-07-30
+Status ✅
+Files: src/Nxs.Core/Protocol/Xgt/XgtFenetCodec.cs, src/Nxs.Core/Memory/AddressInput.cs,
+  src/Nxs.App/ViewModels/{MainWindowViewModel,DigitalPointGroupViewModel,WatchRowViewModel,AnalogPointViewModel}.cs,
+  src/Nxs.App/{App.axaml,Views/MainWindow.axaml}, spec/xgt-fenet-reference.md,
+  tests/Nxs.Core.Tests/Memory/AddressInputTests.cs, tests/Nxs.Core.Tests/Protocol/Xgt/XgtFenetCodecTests.cs,
+  tests/Nxs.App.Tests/{LowAddressAndEditingTests,DigitalPointGroupSmokeTests,AnalogPointSmokeTests}.cs
+Tests 473/473 (Core 280 + Integration 61 + App 132) · 빌드 경고0/에러0
+
+[근본 원인] **LabVIEW → 시뮬레이터 쓰기 실패.** 사용자가 "낮은 번지가 안 된다"고 보고했으나
+  재현 테스트로 파서·뷰모델·낮은 주소 모두 정상임을 먼저 확인했다(10/10 통과). 그 뒤 사용자가
+  "랩뷰에서 PLC 쪽으로 쓰는 게 안 된다"고 정정해 주어 진짜 원인을 찾았다.
+  spec 초안 §3 에서 **신뢰도 '낮음'으로 표시해 둔 바로 그 지점**이었다: 개별 쓰기 값 구간에
+  블록별 DataSize(2바이트)가 있다고 가정했는데, 크기 필드 없이 값만 오는 프레임을 받으면
+  **값의 앞 2바이트를 길이로 오독**해 Slice 가 범위를 벗어나고 "데이터부 해석 실패"로 거절했다.
+  값이 0xFFFF 면 65535바이트를 읽으려 하는 식이다.
+[결정] **프레임 길이로 배치를 판별한다 — 추측을 없앴다.** 헤더 Length 가 데이터부 크기를 정확히 주므로
+  이름 구간 뒤 남은 바이트가 N×(2+요소크기) 면 크기필드 있음, N×요소크기 면 없음으로 확정된다.
+  두 값은 절대 같을 수 없으므로(2>0) 해가 유일하다. 어느 쪽과도 안 맞으면 무엇이 안 맞는지 수치로
+  알리며 거절한다 — 조용히 오독하는 것보다 정확히 거절하는 편이 낫다.
+  이로써 초안에서 가장 위험했던 가정 하나가 **가정이 아니게** 되었다.
+[결정] **주소 입력 정규화(AddressInput).** 한글 IME 전각 문자(％ＭＷ０)가 화면에서 거의 같아 보이는데
+  파서는 거부하므로 "왜 안 되는지 모르는" 증상이 된다. 전각→ASCII 접기 · 공백 제거 · 대문자화 ·
+  선행 % 보충을 적용했다. 실패 시 받은 문자의 **코드포인트를 표시**해 눈에 안 보이는 문자를 드러낸다.
+[결정] **출력 점도 사용자가 직접 켤 수 있게 했다.** 감시 전용으로 두면 마스터가 읽을 %Q 값을 만들
+  방법이 없다 — 실장비에서는 PLC 프로그램이 %Q 를 쓰지만 시뮬레이터에서는 사람이 그 역할을 해야 한다.
+  LED 모양을 유지한 클릭 가능 토글(ledToggle)로 만들고 전체 ON/OFF 도 붙였다.
+  입력/출력의 차이는 표시 방식과 관용적 용도뿐이다.
+[버그 수정] 200ms 주기 갱신이 **입력 중인 텍스트를 되돌려 캐럿을 뺏는** 문제. 마스터가 같은 주소를
+  폴링하며 쓰는 상황에서는 실제로 입력이 불가능해진다. 마지막 키 입력 후 1.5초는 사용자에게
+  우선권을 준다(워치·A/D 행 모두).
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)

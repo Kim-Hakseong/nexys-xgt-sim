@@ -124,7 +124,7 @@ public class AnalogPointSmokeTests
         Add(vm, "%MX801");
 
         Assert.Empty(vm.AnalogPoints);
-        Assert.Contains("비트 주소", vm.ErrorMessage!, StringComparison.Ordinal);
+        Assert.Contains("비트", vm.ErrorMessage!, StringComparison.Ordinal);
         vm.Shutdown();
     }
 

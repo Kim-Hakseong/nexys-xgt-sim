@@ -379,6 +379,141 @@ public class XgtFenetCodecTests
         Assert.Equal(0xDDCCu, memory.ReadScalar(IecAddress.Parse("%MW401")));
     }
 
+    /// <summary>크기 필드 **없이** 값만 담는 쓰기 요청(배치 B).</summary>
+    private static byte[] WriteWithoutSizeField(ushort dataType, params (string Name, byte[] Value)[] items)
+    {
+        var body = new List<byte>();
+        body.AddRange(U16(0x0058));
+        body.AddRange(U16(dataType));
+        body.AddRange(U16(0x0000));
+        body.AddRange(U16((ushort)items.Length));
+        foreach (var (name, _) in items)
+        {
+            var ascii = Encoding.ASCII.GetBytes(name);
+            body.AddRange(U16((ushort)ascii.Length));
+            body.AddRange(ascii);
+        }
+
+        foreach (var (_, value) in items)
+        {
+            body.AddRange(value);   // DataSize 없음
+        }
+
+        return body.ToArray();
+    }
+
+    // ==================== 쓰기 값 구간 배치 자동 판별 ====================
+    // spec 초안 §3 에서 신뢰도 '낮음' 이었던 지점. 프레임 길이로 산술 판별한다.
+
+    [Fact]
+    public void WriteWithPerBlockSizeFieldIsAccepted()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(WriteIndividualData(0x0002, ("%MW0", [0xD2, 0x04]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(1234u, memory.ReadScalar(IecAddress.Parse("%MW0")));
+    }
+
+    [Fact]
+    public void WriteWithoutSizeFieldIsAlsoAccepted()
+    {
+        // LabVIEW 가 크기 필드를 생략하고 값만 보내는 경우 — 이전 구현은 값의 앞 2바이트를
+        // 길이로 오독해 해석 실패로 거절했다. 이것이 "쓰기가 안 된다" 의 원인이었다.
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(WriteWithoutSizeField(0x0002, ("%MW0", [0xD2, 0x04]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(1234u, memory.ReadScalar(IecAddress.Parse("%MW0")));
+    }
+
+    [Theory]
+    [InlineData("%MW0")]
+    [InlineData("%MW1")]
+    [InlineData("%MW320")]
+    [InlineData("%MW4000")]   // 테스트 메모리 8192바이트 내 상단
+    public void WriteWithoutSizeFieldWorksAtAnyAddressIncludingLowOnes(string address)
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(WriteWithoutSizeField(0x0002, (address, [0x34, 0x12]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(0x1234u, memory.ReadScalar(IecAddress.Parse(address)));
+    }
+
+    [Fact]
+    public void ValueBytesThatLookLikeAHugeLengthNoLongerBreakTheWrite()
+    {
+        // 값 0xFFFF 를 크기 필드로 오독하면 65535바이트를 읽으려 해 실패했다.
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(WriteWithoutSizeField(0x0002, ("%MW5", [0xFF, 0xFF]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(0xFFFFu, memory.ReadScalar(IecAddress.Parse("%MW5")));
+    }
+
+    [Fact]
+    public void BitWriteWithoutSizeFieldIsAccepted()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(WriteWithoutSizeField(0x0000, ("%MX0", [0x01]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.True(memory.ReadBit(IecAddress.Parse("%MX0")));
+    }
+
+    [Fact]
+    public void DWordWriteWithoutSizeFieldIsAccepted()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(
+            WriteWithoutSizeField(0x0003, ("%MD0", [0x78, 0x56, 0x34, 0x12]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(0x12345678u, memory.ReadScalar(IecAddress.Parse("%MD0")));
+    }
+
+    [Fact]
+    public void MultiBlockWriteWithoutSizeFieldIsAccepted()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(WriteWithoutSizeField(
+            0x0002, ("%MW10", [0x01, 0x00]), ("%MW11", [0x02, 0x00]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(1u, memory.ReadScalar(IecAddress.Parse("%MW10")));
+        Assert.Equal(2u, memory.ReadScalar(IecAddress.Parse("%MW11")));
+    }
+
+    [Fact]
+    public void WriteWithAnImpossibleValueSectionLengthIsRejectedWithADiagnostic()
+    {
+        var (codec, _) = NewCodec();
+        // 워드 1블록인데 값 구간이 1바이트 → 두 배치 모두와 맞지 않는다.
+        var body = new List<byte>();
+        body.AddRange(U16(0x0058));
+        body.AddRange(U16(0x0002));
+        body.AddRange(U16(0x0000));
+        body.AddRange(U16(0x0001));
+        var ascii = Encoding.ASCII.GetBytes("%MW0");
+        body.AddRange(U16((ushort)ascii.Length));
+        body.AddRange(ascii);
+        body.Add(0x01);
+
+        var exchange = codec.Handle(Frame(body.ToArray()));
+
+        Assert.NotEqual(PlcErrorReason.None, exchange.Reason);
+        // 조용히 오독하지 않고 무엇이 안 맞는지 알려준다.
+        Assert.Contains("맞지 않습니다", exchange.RequestSummary, StringComparison.Ordinal);
+    }
+
     // ==================== 오류 ====================
 
     [Fact]

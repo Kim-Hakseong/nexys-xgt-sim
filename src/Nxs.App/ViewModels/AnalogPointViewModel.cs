@@ -15,10 +15,14 @@ namespace Nxs.App.ViewModels;
 /// </remarks>
 public sealed partial class AnalogPointViewModel : ObservableObject
 {
+    /// <summary>사용자 입력 직후 주기 갱신을 보류하는 시간(캐럿 보호).</summary>
+    private static readonly TimeSpan EditGrace = TimeSpan.FromMilliseconds(1500);
+
     private readonly PlcMemory _memory;
     private readonly Action<AnalogPointViewModel>? _onRemove;
     private bool _updating;
     private byte[] _displayed = [];
+    private DateTime _lastUserEditUtc = DateTime.MinValue;
 
     [ObservableProperty]
     private string _engineeringText = "0";
@@ -92,6 +96,12 @@ public sealed partial class AnalogPointViewModel : ObservableObject
     /// <summary>메모리가 외부에서 바뀐 경우에만 표시를 갱신한다.</summary>
     public void Refresh()
     {
+        // 사용자가 방금 입력했다면 표시를 건드리지 않는다 (타이머가 캐럿을 뺏지 않도록).
+        if (DateTime.UtcNow - _lastUserEditUtc < EditGrace)
+        {
+            return;
+        }
+
         var raw = _memory.ReadRaw(Address);
         if (raw.AsSpan().SequenceEqual(_displayed))
         {
@@ -159,6 +169,8 @@ public sealed partial class AnalogPointViewModel : ObservableObject
             return;
         }
 
+        _lastUserEditUtc = DateTime.UtcNow;
+
         if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var eu))
         {
             Error = "숫자가 아닙니다 (예: 5, 12.75, -3.2)";
@@ -181,6 +193,8 @@ public sealed partial class AnalogPointViewModel : ObservableObject
         {
             return;
         }
+
+        _lastUserEditUtc = DateTime.UtcNow;
 
         if (!long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw))
         {

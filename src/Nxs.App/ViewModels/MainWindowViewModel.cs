@@ -251,12 +251,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void AddWatch()
     {
         ErrorMessage = null;
-        var address = NewWatchAddress.Trim();
+        var address = AddressInput.Normalize(NewWatchAddress);
 
         if (!WatchEntry.IsValid(address))
         {
-            ErrorMessage = $"주소를 해석할 수 없습니다: '{address}' " +
-                "(예: %MW320, %MD422, %MX801, %IW80, %QX1024)";
+            ErrorMessage = $"주소를 해석할 수 없습니다 — {AddressInput.Describe(NewWatchAddress)}. " +
+                "형식: %<영역 I/Q/M><크기 X/B/W/D/L><번지> (예: %MW0 · %MW320 · %MD422 · %MX801)";
             return;
         }
 
@@ -316,12 +316,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void AddDigitalPoint(string rawAddress, string label, DigitalPointMode mode)
     {
         ErrorMessage = null;
-        var address = rawAddress.Trim();
+        var address = AddressInput.Normalize(rawAddress);
 
         if (!DigitalPointEntry.IsValid(address))
         {
-            ErrorMessage = $"주소를 해석할 수 없습니다: '{address}' " +
-                "(예: %MX801 · %MB40 · %MW320 · %MD422 · %ML50 · %QX2000)";
+            ErrorMessage = $"주소를 해석할 수 없습니다 — {AddressInput.Describe(rawAddress)}. " +
+                "형식: %<영역 I/Q/M><크기 X/B/W/D/L><번지> (예: %MX801 · %MB40 · %MW0 · %MD422)";
             return;
         }
 
@@ -402,12 +402,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void AddAnalogPoint()
     {
         ErrorMessage = null;
-        var address = NewAnalogAddress.Trim();
+        var address = AddressInput.Normalize(NewAnalogAddress);
 
         if (!AnalogPointEntry.IsValid(address))
         {
-            ErrorMessage = $"주소를 해석할 수 없습니다: '{address}' " +
-                "(비트 주소는 아날로그로 쓸 수 없습니다 — 예: %IW80 · %MW500 · %MD100)";
+            ErrorMessage = $"주소를 해석할 수 없습니다 — {AddressInput.Describe(NewAnalogAddress)}. " +
+                "비트(%..X)는 아날로그로 쓸 수 없습니다 (예: %IW80 · %MW0 · %MD100)";
             return;
         }
 

@@ -47,7 +47,7 @@ public class DigitalPointGroupSmokeTests
     }
 
     [AvaloniaFact]
-    public void AddingAnOutputPointCreatesAMonitorOnlyRow()
+    public void AddingAnOutputPointCreatesARowInTheOutputList()
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
@@ -56,7 +56,9 @@ public class DigitalPointGroupSmokeTests
         vm.AddOutputPointCommand.Execute(null);
 
         var group = Assert.Single(vm.OutputGroups);
-        Assert.False(group.IsWritable);
+        Assert.False(group.IsInputMode);
+        // 출력도 직접 조작할 수 있다 — 시뮬레이터에서는 사람이 PLC 프로그램 역할을 한다.
+        Assert.True(group.IsWritable);
         Assert.True(vm.HasOutputGroups);
         Assert.Empty(vm.InputGroups);
 
@@ -84,17 +86,17 @@ public class DigitalPointGroupSmokeTests
     }
 
     [AvaloniaFact]
-    public void OutputPointDoesNotWriteWhenItsStateChanges()
+    public void OutputPointWritesWhenTheUserTogglesIt()
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
         vm.NewOutputPointAddress = "%QX2000";
         vm.AddOutputPointCommand.Execute(null);
 
-        // 감시 전용이므로 비트를 건드려도 메모리에 쓰지 않는다.
+        // 마스터가 읽을 %Q 값을 사람이 만들 수 있어야 한다.
         vm.OutputGroups[0].Bits[0].IsOn = true;
 
-        Assert.False(vm.Engine.Memory.ReadBit(IecAddress.Parse("%QX2000")));
+        Assert.True(vm.Engine.Memory.ReadBit(IecAddress.Parse("%QX2000")));
         vm.Shutdown();
     }
 
@@ -146,7 +148,7 @@ public class DigitalPointGroupSmokeTests
     [AvaloniaTheory]
     [InlineData("%ZX1")]
     [InlineData("")]
-    [InlineData("MW320")]
+    [InlineData("헛소리")]
     public void InvalidAddressIsRejected(string address)
     {
         var vm = NewViewModel();
@@ -219,7 +221,7 @@ public class DigitalPointGroupSmokeTests
     }
 
     [AvaloniaFact]
-    public void SetAllDoesNothingOnAnOutputGroup()
+    public void SetAllWorksOnAnOutputGroupToo()
     {
         var vm = NewViewModel();
         new MainWindow { DataContext = vm }.Show();
@@ -228,7 +230,7 @@ public class DigitalPointGroupSmokeTests
 
         vm.OutputGroups[0].SetAllCommand.Execute(null);
 
-        Assert.Equal(0u, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW900")));
+        Assert.Equal(0xFFFFu, vm.Engine.Memory.ReadScalar(IecAddress.Parse("%MW900")));
         vm.Shutdown();
     }
 
@@ -295,9 +297,9 @@ public class DigitalPointGroupSmokeTests
             var output = Assert.Single(reopened.OutputGroups);
             Assert.Equal("%MX801", input.AddressText);
             Assert.Equal("운전 지령", input.Label);
-            Assert.True(input.IsWritable);
+            Assert.True(input.IsInputMode);
             Assert.Equal("%QX2000", output.AddressText);
-            Assert.False(output.IsWritable);
+            Assert.False(output.IsInputMode);
             // 켜 둔 상태가 초기값으로 저장되어 복원된다.
             Assert.True(input.Bits[0].IsOn);
             reopened.Shutdown();
