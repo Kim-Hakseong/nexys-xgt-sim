@@ -50,6 +50,7 @@ public class WatchListSmokeTests
     [InlineData("%MX801", "BIT")]
     [InlineData("%MB40", "BYTE")]
     [InlineData("%QX1024", "BIT")]
+    [InlineData("%ML50", "LWORD")]
     public void EveryAddressFormCanBeWatched(string address, string expectedSize)
     {
         var vm = NewViewModel();
@@ -198,6 +199,138 @@ public class WatchListSmokeTests
 
         Assert.Equal("0x12", row.ValueText);
         vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void FloatFormatIsOfferedOnFourByteAddressesOnly()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+
+        vm.NewWatchAddress = "%MD500";
+        vm.AddWatchCommand.Execute(null);
+        vm.NewWatchAddress = "%MW320";
+        vm.AddWatchCommand.Execute(null);
+        vm.NewWatchAddress = "%ML60";
+        vm.AddWatchCommand.Execute(null);
+
+        Assert.Contains(WatchFormat.Float, vm.Watches[0].Formats);      // %MD = 4바이트
+        Assert.DoesNotContain(WatchFormat.Double, vm.Watches[0].Formats);
+        Assert.DoesNotContain(WatchFormat.Float, vm.Watches[1].Formats); // %MW = 2바이트
+        Assert.Contains(WatchFormat.Double, vm.Watches[2].Formats);     // %ML = 8바이트
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void FloatValueRoundTripsThroughTheWatchRow()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+        vm.NewWatchAddress = "%MD500";
+        vm.AddWatchCommand.Execute(null);
+        var row = vm.Watches[0];
+        row.Format = WatchFormat.Float;
+
+        row.ValueText = "3.14159274";
+
+        Assert.Null(row.Error);
+        Assert.Equal("DB 0F 49 40",
+            Nxs.Core.Protocol.Hex.Format(vm.Engine.Memory.ReadRaw(row.Address)));
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void DoubleValueRoundTripsThroughTheWatchRow()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+        vm.NewWatchAddress = "%ML60";
+        vm.AddWatchCommand.Execute(null);
+        var row = vm.Watches[0];
+        row.Format = WatchFormat.Double;
+
+        row.ValueText = "-273.15";
+        Assert.Null(row.Error);
+
+        // 외부에서 안 바뀌었으니 표시는 그대로, 다시 읽으면 같은 값이어야 한다.
+        row.Format = WatchFormat.Double;
+        Assert.Equal("-273.15", row.ValueText);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void ChangingByteOrderReinterpretsTheSameBytes()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+        vm.NewWatchAddress = "%MD500";
+        vm.AddWatchCommand.Execute(null);
+        var row = vm.Watches[0];
+        row.Format = WatchFormat.Hex;
+        row.Order = ByteOrder.Dcba;
+        row.ValueText = "0x12345678";
+
+        var stored = vm.Engine.Memory.ReadRaw(row.Address);
+
+        row.Order = ByteOrder.Abcd;
+
+        // 바이트는 그대로인데 해석만 바뀐다 (엔디안 전환).
+        Assert.Equal(stored, vm.Engine.Memory.ReadRaw(row.Address));
+        Assert.Equal("0x78563412", row.ValueText);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void ByteOrderIsHiddenForSingleByteAddresses()
+    {
+        var vm = NewViewModel();
+        new MainWindow { DataContext = vm }.Show();
+
+        vm.NewWatchAddress = "%MX801";
+        vm.AddWatchCommand.Execute(null);
+        vm.NewWatchAddress = "%MW320";
+        vm.AddWatchCommand.Execute(null);
+
+        Assert.False(vm.Watches[0].SupportsByteOrder);   // 비트 = 1바이트
+        Assert.Empty(vm.Watches[0].Orders);
+        Assert.True(vm.Watches[1].SupportsByteOrder);
+        Assert.Equal(4, vm.Watches[1].Orders.Count);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void ByteOrderSurvivesProjectSaveAndReopen()
+    {
+        var dir = Directory.CreateTempSubdirectory("nxsim-order-").FullName;
+        try
+        {
+            var path = Path.Combine(dir, "order.nxp");
+            var vm = NewViewModel();
+            new MainWindow { DataContext = vm }.Show();
+            vm.NewWatchAddress = "%MD500";
+            vm.AddWatchCommand.Execute(null);
+            vm.Watches[0].Format = WatchFormat.Float;
+            vm.Watches[0].Order = ByteOrder.Abcd;
+            vm.SaveProject(path);
+            vm.Shutdown();
+
+            var reopened = NewViewModel();
+            new MainWindow { DataContext = reopened }.Show();
+            reopened.OpenProject(path);
+
+            Assert.Equal(WatchFormat.Float, reopened.Watches[0].Format);
+            Assert.Equal(ByteOrder.Abcd, reopened.Watches[0].Order);
+            reopened.Shutdown();
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [AvaloniaFact]

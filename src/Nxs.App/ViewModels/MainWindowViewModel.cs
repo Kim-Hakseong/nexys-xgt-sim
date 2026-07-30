@@ -91,6 +91,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>워치가 하나라도 있는지.</summary>
     public bool HasWatches => Watches.Count > 0;
 
+    /// <summary>사용자 지정 디지털 입력 점(토글).</summary>
+    public ObservableCollection<CustomDigitalPointViewModel> CustomInputPoints { get; } = [];
+
+    /// <summary>사용자 지정 디지털 출력 점(LED 감시).</summary>
+    public ObservableCollection<CustomDigitalPointViewModel> CustomOutputPoints { get; } = [];
+
+    /// <summary>사용자 지정 입력 점이 있는지.</summary>
+    public bool HasCustomInputPoints => CustomInputPoints.Count > 0;
+
+    /// <summary>사용자 지정 출력 점이 있는지.</summary>
+    public bool HasCustomOutputPoints => CustomOutputPoints.Count > 0;
+
     /// <summary>코덱이 미검증 초안인지 — 경고 배너 표시용.</summary>
     public bool IsCodecDraft => CanStartServer && XgtFenetCodec.IsDraft;
 
@@ -256,6 +268,97 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusMessage = $"워치 추가: {resolved.Text}";
     }
 
+    /// <summary>새 디지털 입력 점 주소.</summary>
+    [ObservableProperty]
+    private string _newInputPointAddress = string.Empty;
+
+    /// <summary>새 디지털 입력 점 별칭.</summary>
+    [ObservableProperty]
+    private string _newInputPointLabel = string.Empty;
+
+    /// <summary>새 디지털 출력 점 주소.</summary>
+    [ObservableProperty]
+    private string _newOutputPointAddress = string.Empty;
+
+    /// <summary>새 디지털 출력 점 별칭.</summary>
+    [ObservableProperty]
+    private string _newOutputPointLabel = string.Empty;
+
+    /// <summary>디지털 입력 점을 추가한다.</summary>
+    [RelayCommand]
+    private void AddInputPoint()
+        => AddDigitalPoint(NewInputPointAddress, NewInputPointLabel, DigitalPointMode.Input);
+
+    /// <summary>디지털 출력 점을 추가한다.</summary>
+    [RelayCommand]
+    private void AddOutputPoint()
+        => AddDigitalPoint(NewOutputPointAddress, NewOutputPointLabel, DigitalPointMode.Output);
+
+    private void AddDigitalPoint(string rawAddress, string label, DigitalPointMode mode)
+    {
+        ErrorMessage = null;
+        var address = rawAddress.Trim();
+
+        if (!DigitalPointEntry.IsValid(address))
+        {
+            ErrorMessage = $"비트 주소를 해석할 수 없습니다: '{address}' " +
+                "(비트 주소만 됩니다 — 예: %MX801, %IX600, %QX2000)";
+            return;
+        }
+
+        var entry = new DigitalPointEntry { Address = address, Label = label.Trim(), Mode = mode };
+        var resolved = entry.Resolve(Engine.Io.Addressing);
+        var target = mode == DigitalPointMode.Input ? CustomInputPoints : CustomOutputPoints;
+
+        if (target.Any(p => p.Address.Area == resolved.Area && p.Address.Offset == resolved.Offset))
+        {
+            ErrorMessage = $"'{resolved.Text}' 는 이미 목록에 있습니다.";
+            return;
+        }
+
+        try
+        {
+            target.Add(new CustomDigitalPointViewModel(
+                Engine.Memory, entry, Engine.Io.Addressing, RemoveDigitalPoint));
+        }
+        catch (AddressRangeException ex)
+        {
+            ErrorMessage = ex.Message;
+            return;
+        }
+
+        if (mode == DigitalPointMode.Input)
+        {
+            NewInputPointAddress = string.Empty;
+            NewInputPointLabel = string.Empty;
+        }
+        else
+        {
+            NewOutputPointAddress = string.Empty;
+            NewOutputPointLabel = string.Empty;
+        }
+
+        OnPropertyChanged(nameof(HasCustomInputPoints));
+        OnPropertyChanged(nameof(HasCustomOutputPoints));
+        StatusMessage = $"디지털 점 추가: {resolved.Text} ({(mode == DigitalPointMode.Input ? "입력" : "출력")})";
+    }
+
+    /// <summary>디지털 점을 제거한다(점의 제거 커맨드가 호출한다).</summary>
+    public void RemoveDigitalPoint(CustomDigitalPointViewModel? point)
+    {
+        if (point is null)
+        {
+            return;
+        }
+
+        if (CustomInputPoints.Remove(point) || CustomOutputPoints.Remove(point))
+        {
+            OnPropertyChanged(nameof(HasCustomInputPoints));
+            OnPropertyChanged(nameof(HasCustomOutputPoints));
+            StatusMessage = $"디지털 점 제거: {point.AddressText}";
+        }
+    }
+
     /// <summary>워치 항목을 제거한다(행의 제거 커맨드가 호출한다).</summary>
     public void RemoveWatchRow(WatchRowViewModel? row)
     {
@@ -340,6 +443,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
             watch.Refresh();
         }
 
+        foreach (var point in CustomInputPoints)
+        {
+            point.Refresh();
+        }
+
+        foreach (var point in CustomOutputPoints)
+        {
+            point.Refresh();
+        }
+
         RefreshTraffic();
         OnPropertyChanged(nameof(CaptureSummary));
         NotifyServerState();
@@ -385,6 +498,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
+        foreach (var point in CustomInputPoints.Where(p => p.IsOn))
+        {
+            initial.Add(new InitialValue { Address = point.AddressText, Value = 1 });
+        }
+
         foreach (var slot in AnalogSlots)
         {
             foreach (var channel in slot.Channels)
@@ -411,6 +529,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 .Select(vm => AutomationRuleSettings.FromRule(vm.Rule with { IsEnabled = vm.IsEnabled }))
                 .ToArray(),
             Watches = Watches.Select(w => w.ToEntry()).ToArray(),
+            DigitalPoints = CustomInputPoints.Concat(CustomOutputPoints)
+                .Select(p => p.Entry).ToArray(),
         };
     }
 
@@ -486,7 +606,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
+        CustomInputPoints.Clear();
+        CustomOutputPoints.Clear();
+        foreach (var entry in project.DigitalPoints)
+        {
+            try
+            {
+                var vm = new CustomDigitalPointViewModel(
+                    Engine.Memory, entry, project.Io.Addressing, RemoveDigitalPoint);
+                (entry.Mode == DigitalPointMode.Input ? CustomInputPoints : CustomOutputPoints).Add(vm);
+            }
+            catch (Exception ex) when (ex is FormatException or AddressRangeException
+                or InvalidOperationException)
+            {
+                ErrorMessage = $"디지털 점 '{entry.Address}' 를 건너뜀: {ex.Message}";
+            }
+        }
+
         OnPropertyChanged(nameof(HasWatches));
+        OnPropertyChanged(nameof(HasCustomInputPoints));
+        OnPropertyChanged(nameof(HasCustomOutputPoints));
         OnPropertyChanged(nameof(RackSummary));
         OnPropertyChanged(nameof(HasAutomationRules));
         OnPropertyChanged(nameof(IsAutomationRunning));

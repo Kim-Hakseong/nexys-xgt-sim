@@ -375,3 +375,38 @@ Tests 325/325 (Core 198 + Integration 58 + App 69) · 빌드 경고0/에러0
   LabVIEW 를 한 번 붙이면 자동 캡처로 1~3번이 즉시 확정된다. 에러 코드 표는 매뉴얼 필요.
 [미검증] Windows 실제 기동 여전히 미확인(빌드 호스트 macOS).
 Next: LabVIEW 접속 → 자동 캡처로 spec 검증 → IsDraft=false
+
+## M11 — 워치 실수·엔디안 + 임의 디지털 점 (사용자 지시) · 2026-07-30
+Status ✅ (LabVIEW 검증 성공 보고 이후 개선)
+Files: src/Nxs.Core/Configuration/{WatchValue,WatchEntry,DigitalPointEntry,NxpProject,NxpProjectFile}.cs,
+  src/Nxs.Core/Memory/{DataSize,IecAddress,PlcMemory}.cs, src/Nxs.Core/Protocol/Xgt/XgtFenetCodec.cs,
+  src/Nxs.App/ViewModels/{WatchRowViewModel,CustomDigitalPointViewModel,DisplayOption,MainWindowViewModel}.cs,
+  src/Nxs.App/Views/MainWindow.axaml, tests/Nxs.Core.Tests/Configuration/{WatchValueTests,WatchEntryTests}.cs,
+  tests/Nxs.App.Tests/{CustomDigitalPointSmokeTests,WatchListSmokeTests,TabRenderTests}.cs,
+  tests/Nxs.Integration.Tests/XgtFenetEndToEndTests.cs
+Tests 375/375 (Core 223 + Integration 61 + App 91) · 빌드 경고0/에러0
+
+[결정] **워치 값을 uint 대신 메모리 바이트로 다룬다.** 엔디안은 본질적으로 바이트 순서 문제이고
+  Double 8바이트는 32비트에 담기지 않는다. WatchValue 가 "MSB 우선 바이트열"을 내부 표현으로 통일하고
+  4가지 순서 치환(ABCD/DCBA/BADC/CDAB)을 적용한다. 모든 치환이 자기 역변환이라 정방향/역방향에 같은 함수를 쓴다
+  (그 성질을 테스트로 고정).
+[결정] 워드오더 표기를 자매 프로젝트(nexys-modbus-workbench) 관례에 맞춰 ABCD/DCBA/BADC/CDAB 로 썼다.
+  A·B·C·D 는 **메모리에 놓인 순서**를 가리킨다. 기본값 DCBA(리틀엔디안) = 기존 ReadScalar 동작과 동일 → 회귀 없음.
+[결정] Double 지원을 위해 **DataSize.LWord(8바이트) + %ML 주소**를 추가했다. XGT 데이터 타입 0x0004 가
+  마침 LWord 라 코덱에서도 함께 지원하게 했다(실행기는 이미 바이트 기반이라 수정 불필요).
+  M1 골든 벡터는 X/B/W/D 와 %ZW10 실패만 검사하므로 영향 없음.
+[결정] ReadScalar/WriteScalar 는 LWord 에서 명확한 예외를 던지고, 대신 ReadRaw/WriteRaw(바이트) 를 추가했다.
+  32비트 API 가 64비트를 조용히 잘라내는 것보다 낫다.
+[결정] 형식 콤보에 **폭에 맞는 형식만** 노출한다 — 2바이트 주소에서 Double 을 고를 수 있으면 혼란만 준다.
+  1바이트 주소는 바이트 순서 콤보를 아예 숨긴다(순서가 무의미).
+[결정] enum 을 콤보에 직접 바인딩하니 "Dcba" 처럼 뜻이 전달되지 않았다 → DisplayOption<T> 래퍼로
+  "DCBA (리틀엔디안)", "실수 Float (4B)" 같은 한국어 이름을 붙였다. 값 변환기 등록보다 단순하다.
+[결정] 사용자 지정 디지털 점(DigitalPointEntry)에 Mode(Input/Output)를 두어 한 목록이 두 탭에 나뉘어 보인다.
+  Input = 토글이 메모리에 반영(마스터가 읽음), Output = 마스터가 쓴 값을 LED 표시(조작 불가).
+  **양쪽 모두 외부 변경을 표시에 반영**하므로 불리언 ON/OFF 를 양방향으로 검증할 수 있다.
+  비트 주소가 아니면 추가 단계에서 거절한다(%MW320 같은 워드 주소를 디지털 점으로 넣을 수 없다).
+[수정] DocShots 표본에서 값을 넣은 뒤 바이트 순서를 바꿨더니 hex 가 뒤집혀 보였다 — 순서가 파싱에도 쓰이므로
+  **순서를 값보다 먼저** 적용해야 한다. 동작은 정상(같은 바이트, 다른 해석)이었고 표본 순서만 바로잡았다.
+[검증] Float 3.14159274 ↔ IEEE754 0x40490FDB 를 4가지 순서 전부로 왕복, Double 전정밀도 왕복,
+  LabVIEW 가 %MD500 에 쓴 실수를 워치가 해석하는 e2e, 커스텀 비트 양방향 e2e 를 테스트로 고정.
+Next: —

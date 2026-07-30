@@ -3,7 +3,7 @@
 LS XGT PLC(XGI CPU) 시뮬레이터. 실장비 없이 **LabVIEW 애플리케이션을 검증**하기 위해 PLC 역할을 대신한다.
 XG5000은 실장비 없이 시뮬레이션이 불가능하므로 그 공백을 메운다.
 
-C# 12 / .NET 8 · Avalonia 11 · 테스트 325개 · 빌드 경고 0
+C# 12 / .NET 8 · Avalonia 11 · 테스트 375개 · 빌드 경고 0
 
 ![디지털 입력 패널](docs/screenshots/01-digital-input.png)
 
@@ -73,7 +73,9 @@ dotnet run --project src/Nxs.App
       → 다르면 `.nxp` 의 `addressing.slotPoints` 를 실제 값으로 맞춘다
 - [ ] **"디지털 입력"** 탭에서 점 하나를 토글해 본다 (즉시 메모리에 반영된다)
 - [ ] **"A/D 입력"** 탭 채널에 값을 넣어 raw 변환이 맞는지 확인한다
-- [ ] **"주소 워치"** 탭에 LabVIEW 가 실제로 읽고 쓰는 주소를 추가한다 (예: `%MW320`, `%MD422`)
+- [ ] **"주소 워치"** 탭에 LabVIEW 가 실제로 읽고 쓰는 주소를 추가한다 (예: `%MW320`, `%MD422`, `%ML60`)
+      → 실수 값이면 형식을 `Float`/`Double` 로, 값이 뒤집혀 보이면 **바이트 순서**를 바꿔 맞춘다
+- [ ] **"디지털 입력/출력"** 탭에 마스터가 쓰는 비트 주소를 추가한다 (예: `%MX900`, `%QX2000`)
 
 ### LabVIEW를 붙일 때
 
@@ -104,9 +106,15 @@ dotnet run --project src/Nxs.App
 
 ## 화면
 
-### 디지털 출력 — 마스터가 쓴 값을 LED로 표시
+### 디지털 입력·출력 — 임의 비트 주소를 양방향으로 확인
 
-사용자가 클릭해도 바뀌지 않는다. LabVIEW가 쓴 값만 반영한다.
+랙 매핑의 고정 주소 외에 **임의 비트 주소를 직접 추가**할 수 있다.
+입력 탭에 넣으면 토글해서 마스터가 읽게 하고, 출력 탭에 넣으면 마스터가 쓴 값을 LED 로 본다 —
+불리언 ON/OFF 를 **양방향으로 검증**할 수 있다.
+
+![디지털 입력 패널](docs/screenshots/01-digital-input.png)
+
+출력 점은 사용자가 클릭해도 바뀌지 않는다. LabVIEW가 쓴 값만 반영한다.
 
 ![디지털 출력 패널](docs/screenshots/02-digital-output.png)
 
@@ -119,8 +127,12 @@ dotnet run --project src/Nxs.App
 ### 주소 워치 — LabVIEW 가 교신하는 임의 주소를 직접 지정
 
 랙 매핑과 무관한 `%M` 영역도 된다. 주소를 넣고 별칭을 붙이면 값을 실시간으로 보고 직접 쓸 수 있다.
-표시 형식은 10진 / 부호 있는 10진 / 16진 / 2진 / ON·OFF 중에 고른다.
-입력도 `4660` · `0x1234` · `-125` · `ON` 을 모두 받는다. 목록은 `.nxp` 에 저장된다.
+
+**표시 형식 7종** — 10진(부호 없음/있음) · 16진 · 2진 · ON/OFF · **실수 Float(4바이트)** · **실수 Double(8바이트)**
+**바이트 순서 4종** — `DCBA(리틀엔디안)` · `ABCD(빅엔디안)` · `BADC(바이트 스왑)` · `CDAB(워드 스왑)`
+
+형식과 바이트 순서를 **항목마다 따로** 정할 수 있어 값 기준을 LabVIEW 와 맞출 수 있다.
+입력도 `4660` · `0x1234` · `-125` · `3.14159` · `ON` 을 모두 받는다. 목록은 `.nxp` 에 저장된다.
 
 ![주소 워치](docs/screenshots/04-watch.png)
 
@@ -194,17 +206,32 @@ RX/TX 쌍, 거절 사유, 타임스탬프가 함께 남는다. 오류 행만 필
       "period": 60, "periodMs": 100 }
   ],
   "watches": [
-    { "address": "%MW320", "label": "설정 압력", "format": "Decimal" },
-    { "address": "%MD422", "label": "적산 유량", "format": "Hex" },
+    { "address": "%MW320", "label": "설정 압력", "format": "Decimal", "order": "Dcba" },
+    { "address": "%MD500", "label": "유량", "format": "Float", "order": "Abcd" },
+    { "address": "%ML60", "label": "적산량", "format": "Double", "order": "Dcba" },
     { "address": "%MX801", "label": "운전 지령", "format": "Bool" }
+  ],
+  "digitalPoints": [
+    { "address": "%MX900", "label": "운전 지령", "mode": "Input" },
+    { "address": "%QX2000", "label": "운전 상태", "mode": "Output" }
   ]
 }
 ```
 
 ### 주소 워치 (`watches`)
 
-LabVIEW 가 교신하는 임의 주소를 지정한다. `format` 은 `Decimal` / `Signed` / `Hex` / `Binary` / `Bool`.
+LabVIEW 가 교신하는 임의 주소를 지정한다.
+
+- `format` — `Decimal` / `Signed` / `Hex` / `Binary` / `Bool` / `Float` / `Double`
+- `order` — `Dcba`(리틀엔디안, 기본) / `Abcd`(빅엔디안) / `Badc`(바이트 스왑) / `Cdab`(워드 스왑)
+
+`Float` 은 4바이트 주소(`%..D`), `Double` 은 8바이트 주소(`%..L`)가 필요하다.
 UI 의 "주소 워치" 탭에서 추가·제거해도 되고, 이 절을 직접 편집해도 된다.
+
+### 사용자 지정 디지털 점 (`digitalPoints`)
+
+임의 비트 주소를 토글하거나 감시한다. `mode` 는 `Input`(사용자 토글) 또는 `Output`(LED 감시).
+비트 주소(`%..X`)만 쓸 수 있다.
 
 ### 자동화 제너레이터
 
@@ -230,7 +257,7 @@ UI 의 "주소 워치" 탭에서 추가·제거해도 되고, 이 절을 직접 
 
 ```bash
 dotnet build                      # 경고 0 / 에러 0 이어야 한다
-dotnet test                       # 전체 325개
+dotnet test                       # 전체 375개
 dotnet run --project tools/Nxs.DocShots -- docs/screenshots   # README 스크린샷 재생성
 ```
 
@@ -274,7 +301,7 @@ fixtures/labview-capture/   캡처 픽스처 (있으면 회귀 자동 편입)
 | 기능 | 상태 |
 |---|---|
 | PLC 메모리맵 (%I/%Q/%M · X/B/W/D · 리틀엔디안 · 스레드 안전) | ✅ |
-| IEC 주소 파서 (`%MW100`, `%MX801`, `%IX0.2.5` 슬롯 형식) | ✅ |
+| IEC 주소 파서 (`%MW100`, `%MD422`, `%ML50`, `%MX801`, `%IX0.2.5`) | ✅ |
 | I/O 구성 모델 → 메모리 자동 매핑 | ✅ |
 | TCP 서버 (멀티클라이언트 · 부분 수신 불변 · 연결 격리) | ✅ |
 | 요청 실행기 (개별/연속 읽기·쓰기 + 정확한 거절) | ✅ |
@@ -282,7 +309,8 @@ fixtures/labview-capture/   캡처 픽스처 (있으면 회귀 자동 편입)
 | 값 자동화 (고정/증가/램프/사인/랜덤/토글) | ✅ |
 | 트래픽 로그 (RX/TX hex + 해석 + 오류 필터 + 파일 저장) | ✅ |
 | 프로젝트 파일 (.nxp JSON) | ✅ |
-| 주소 워치 (임의 주소 지정·형식 선택) | ✅ |
+| 주소 워치 (임의 주소 · 형식 7종 · 바이트 순서 4종) | ✅ |
+| 사용자 지정 디지털 점 (임의 비트 · 양방향 확인) | ✅ |
 | **XGT FEnet 코덱 (TCP 2004)** | ⚠️ **동작하지만 미검증 초안** |
 | 프레임 자동 캡처 (검증 근거 수집) | ✅ |
 | **Cnet 서버 (P1)** | ⛔ spec 근거 부재 |

@@ -125,12 +125,6 @@ public sealed class XgtFenetCodec : IFrameCodec
 
     private FrameExchange HandleRead(XgtFenetHeader header, ushort dataType, ReadOnlySpan<byte> data)
     {
-        if (dataType == TypeLWord)
-        {
-            return Reject(header, CmdReadResponse, dataType, PlcErrorReason.UnsupportedDataType,
-                "롱워드(LWord) 미지원");
-        }
-
         var blockCount = BinaryPrimitives.ReadUInt16LittleEndian(data[6..]);
         var cursor = 8;
 
@@ -165,12 +159,6 @@ public sealed class XgtFenetCodec : IFrameCodec
 
     private FrameExchange HandleWrite(XgtFenetHeader header, ushort dataType, ReadOnlySpan<byte> data)
     {
-        if (dataType == TypeLWord)
-        {
-            return Reject(header, CmdWriteResponse, dataType, PlcErrorReason.UnsupportedDataType,
-                "롱워드(LWord) 미지원");
-        }
-
         var blockCount = BinaryPrimitives.ReadUInt16LittleEndian(data[6..]);
         var cursor = 8;
 
@@ -247,7 +235,7 @@ public sealed class XgtFenetCodec : IFrameCodec
     }
 
     private static bool IsScalarType(ushort dataType)
-        => dataType is TypeBit or TypeByte or TypeWord or TypeDWord;
+        => dataType is TypeBit or TypeByte or TypeWord or TypeDWord or TypeLWord;
 
     private FrameExchange BuildReadResponse(
         XgtFenetHeader header, ushort dataType, PlcResponse response, string requestSummary)

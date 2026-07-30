@@ -374,6 +374,62 @@ public class XgtFenetEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task MasterWritesAFloatAndTheWatchRendersItWithTheMatchingByteOrder()
+    {
+        // LabVIEW 가 %MD500 에 IEEE754 단정도 3.14159274 를 리틀엔디안으로 쓴다.
+        await using var master = await XgtMaster.ConnectAsync(_port);
+        await master.ExchangeAsync(WriteRequest(0x0003, "%MD500", [0xDB, 0x0F, 0x49, 0x40]));
+
+        var watch = new WatchEntry
+        {
+            Address = "%MD500", Format = WatchFormat.Float, Order = ByteOrder.Dcba,
+        };
+        var rendered = WatchValue.Render(
+            _memory.ReadRaw(watch.Resolve()), watch.Format, watch.Order);
+
+        Assert.StartsWith("3.14159", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MasterReadsBackADoubleWrittenThroughTheWatch()
+    {
+        // 사용자가 워치에 배정도 실수를 넣으면 마스터가 %ML 8바이트로 읽어간다.
+        var watch = new WatchEntry
+        {
+            Address = "%ML60", Format = WatchFormat.Double, Order = ByteOrder.Dcba,
+        };
+        var address = watch.Resolve();
+        var bytes = WatchValue.Parse("-273.15", 8, watch.Format, watch.Order);
+        _memory.WriteRaw(address, bytes!);
+
+        await using var master = await XgtMaster.ConnectAsync(_port);
+        var response = await master.ExchangeAsync(ReadRequest(0x0004, "%ML60"));
+
+        Assert.Equal(0x0000, Data(response, 6));
+        Assert.Equal(8, Data(response, 10));
+        Assert.Equal(bytes, response.AsSpan(32, 8).ToArray());
+    }
+
+    [Fact]
+    public async Task CustomDigitalPointIsVerifiableInBothDirections()
+    {
+        // 사용자 지정 비트: 사용자가 켜면 마스터가 읽고, 마스터가 쓰면 사용자가 본다.
+        var entry = new DigitalPointEntry { Address = "%MX1500", Mode = DigitalPointMode.Input };
+        var address = entry.Resolve();
+        await using var master = await XgtMaster.ConnectAsync(_port);
+
+        // 방향 1: 사용자 → 마스터
+        _memory.WriteBit(address, true);
+        var read = await master.ExchangeAsync(ReadRequest(0x0000, "%MX1500"));
+        Assert.Equal(0x01, read[32]);
+
+        // 방향 2: 마스터 → 사용자
+        _memory.WriteBit(address, false);
+        await master.ExchangeAsync(WriteRequest(0x0000, "%MX1500", [0x01]));
+        Assert.True(_memory.ReadBit(address));
+    }
+
+    [Fact]
     public async Task WatchAddressWrittenByTheMasterIsVisibleThroughTheWatchEntry()
     {
         // 사용자가 지정한 워치 주소가 실제 마스터 쓰기와 같은 셀을 가리키는지.
@@ -383,6 +439,7 @@ public class XgtFenetEndToEndTests : IAsyncLifetime
         await master.ExchangeAsync(WriteRequest(0x0003, "%MD422", [0xEF, 0xBE, 0xAD, 0xDE]));
 
         var address = watch.Resolve();
-        Assert.Equal("0xDEADBEEF", WatchEntry.Render(_memory.ReadScalar(address), address.Size, watch.Format));
+        Assert.Equal("0xDEADBEEF",
+            WatchValue.Render(_memory.ReadRaw(address), watch.Format, watch.Order));
     }
 }

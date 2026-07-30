@@ -106,6 +106,9 @@ public sealed class PlcMemory
                 DataSize.Byte => span[0],
                 DataSize.Word => BinaryPrimitives.ReadUInt16LittleEndian(span),
                 DataSize.DWord => BinaryPrimitives.ReadUInt32LittleEndian(span),
+                DataSize.LWord => throw new ArgumentOutOfRangeException(
+                    nameof(address), address.Size,
+                    "롱워드(64비트)는 32비트 스칼라로 읽을 수 없습니다 — ReadRaw 를 쓰십시오"),
                 _ => throw new ArgumentOutOfRangeException(nameof(address), address.Size, "알 수 없는 크기 지정자"),
             };
         }
@@ -139,6 +142,10 @@ public sealed class PlcMemory
                 case DataSize.DWord:
                     BinaryPrimitives.WriteUInt32LittleEndian(span, value);
                     break;
+                case DataSize.LWord:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(address), address.Size,
+                        "롱워드(64비트)는 32비트 스칼라로 쓸 수 없습니다 — WriteRaw 를 쓰십시오");
                 default:
                     throw new ArgumentOutOfRangeException(nameof(address), address.Size, "알 수 없는 크기 지정자");
             }
@@ -211,6 +218,44 @@ public sealed class PlcMemory
                 BinaryPrimitives.WriteUInt16LittleEndian(span[(i * 2)..], data[i]);
             }
         }
+    }
+
+    /// <summary>주소가 참조하는 바이트를 그대로 읽는다 (엔디안 해석 없음).</summary>
+    /// <remarks>비트 주소는 1바이트(0x00 또는 0x01)로 정규화해 반환한다.</remarks>
+    /// <exception cref="AddressRangeException">범위를 벗어났을 때.</exception>
+    public byte[] ReadRaw(IecAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        return address.Size == DataSize.Bit
+            ? [ReadBit(address) ? (byte)0x01 : (byte)0x00]
+            : ReadBytes(address.Area, address.ByteStart, address.ByteLength);
+    }
+
+    /// <summary>주소가 참조하는 바이트를 그대로 쓴다 (엔디안 해석 없음).</summary>
+    /// <exception cref="AddressRangeException">범위를 벗어났을 때.</exception>
+    /// <exception cref="ArgumentException">길이가 주소 폭과 다를 때.</exception>
+    public void WriteRaw(IecAddress address, ReadOnlySpan<byte> data)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+
+        if (address.Size == DataSize.Bit)
+        {
+            if (data.Length != 1)
+            {
+                throw new ArgumentException($"비트 주소에는 1바이트를 써야 합니다. 실제: {data.Length}", nameof(data));
+            }
+
+            WriteBit(address, data[0] != 0);
+            return;
+        }
+
+        if (data.Length != address.ByteLength)
+        {
+            throw new ArgumentException(
+                $"{address.Text} 는 {address.ByteLength}바이트인데 {data.Length}바이트를 주었습니다", nameof(data));
+        }
+
+        WriteBytes(address.Area, address.ByteStart, data);
     }
 
     /// <summary>영역 전체의 스냅샷을 만든다 (UI 갱신용).</summary>

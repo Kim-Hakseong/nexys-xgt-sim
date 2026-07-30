@@ -4,7 +4,7 @@ namespace Nxs.Core.Memory;
 
 /// <summary>
 /// IEC 직접변수 주소. 불변.
-/// 표기: <c>%&lt;area&gt;&lt;size&gt;&lt;offset&gt;</c> (예: %MW100, %MX801) 또는
+/// 표기: <c>%&lt;area&gt;&lt;size&gt;&lt;offset&gt;</c> (예: %MW100, %MX801, %MD422, %ML50) 또는
 /// 슬롯 형식 <c>%&lt;area&gt;&lt;size&gt;&lt;base&gt;.&lt;slot&gt;.&lt;point&gt;</c> (예: %IX0.2.5).
 /// </summary>
 public sealed record IecAddress
@@ -147,6 +147,7 @@ public sealed record IecAddress
             case 'B': size = DataSize.Byte; return true;
             case 'W': size = DataSize.Word; return true;
             case 'D': size = DataSize.DWord; return true;
+            case 'L': size = DataSize.LWord; return true;
             default: size = default; return false;
         }
     }

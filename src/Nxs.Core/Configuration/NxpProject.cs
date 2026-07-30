@@ -89,6 +89,11 @@ public sealed record NxpProject
     /// </summary>
     public IReadOnlyList<WatchEntry> Watches { get; init; } = [];
 
+    /// <summary>
+    /// 사용자 지정 디지털 점 — 랙 매핑 밖의 임의 비트 주소를 토글(입력)하거나 감시(출력)한다.
+    /// </summary>
+    public IReadOnlyList<DigitalPointEntry> DigitalPoints { get; init; } = [];
+
     /// <summary>CONTEXT 기재 랙 기반 기본 프로젝트를 만든다.</summary>
     public static NxpProject CreateDefault(int port) => new()
     {

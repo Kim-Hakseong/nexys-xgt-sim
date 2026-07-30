@@ -219,8 +219,9 @@ public static class Program
         {
             ("%MW320", "설정 압력", WatchFormat.Decimal),
             ("%MD422", "적산 유량", WatchFormat.Hex),
+            ("%MD500", "유량 (Float)", WatchFormat.Float),
+            ("%ML60", "적산량 (Double)", WatchFormat.Double),
             ("%MX801", "운전 지령", WatchFormat.Bool),
-            ("%MW500", "모터 회전수", WatchFormat.Decimal),
             ("%MW501", "온도 (부호)", WatchFormat.Signed),
             ("%MB40", "상태 비트맵", WatchFormat.Binary),
         })
@@ -232,17 +233,50 @@ public static class Program
         }
 
         // 값을 먼저 넣고 형식을 나중에 적용한다 — 형식 변경이 값을 그 형식으로 다시 렌더한다.
-        viewModel.Watches[0].ValueText = "1250";
-        viewModel.Watches[1].ValueText = "316145";
-        viewModel.Watches[2].ValueText = "1";
-        viewModel.Watches[3].ValueText = "1780";
-        viewModel.Watches[4].ValueText = "-125";
-        viewModel.Watches[5].ValueText = "165";
-
+        // 형식을 먼저 적용해야 실수 입력이 올바르게 파싱된다.
         foreach (var row in viewModel.Watches)
         {
             row.Format = row.PendingFormat;
         }
+
+        viewModel.Watches[1].Order = ByteOrder.Abcd;   // 값보다 먼저 — 순서가 파싱에 쓰인다
+
+        viewModel.Watches[0].ValueText = "1250";
+        viewModel.Watches[1].ValueText = "0x0004D2F1";
+        viewModel.Watches[2].ValueText = "12.75";
+        viewModel.Watches[3].ValueText = "1234567.891011";
+        viewModel.Watches[4].ValueText = "ON";
+        viewModel.Watches[5].ValueText = "-125";
+        viewModel.Watches[6].ValueText = "165";
+
+        // 사용자 지정 디지털 점 — 임의 비트 주소를 양방향으로 확인
+        foreach (var (address, label) in new[]
+        {
+            ("%MX900", "운전 지령"), ("%MX901", "리셋 요청"), ("%MX902", "비상 정지"),
+        })
+        {
+            viewModel.NewInputPointAddress = address;
+            viewModel.NewInputPointLabel = label;
+            viewModel.AddInputPointCommand.Execute(null);
+        }
+
+        viewModel.CustomInputPoints[0].IsOn = true;
+        viewModel.CustomInputPoints[2].IsOn = true;
+
+        foreach (var (address, label) in new[]
+        {
+            ("%QX2000", "운전 상태"), ("%QX2001", "경보 출력"), ("%MX950", "인터록"),
+        })
+        {
+            viewModel.NewOutputPointAddress = address;
+            viewModel.NewOutputPointLabel = label;
+            viewModel.AddOutputPointCommand.Execute(null);
+        }
+
+        // 마스터가 쓴 상태 모사
+        viewModel.Engine.Memory.WriteBit(IecAddress.Parse("%QX2000"), true);
+        viewModel.Engine.Memory.WriteBit(IecAddress.Parse("%MX950"), true);
+        viewModel.Refresh();
 
         // 입력 점: 결정적 패턴 (3의 배수 ON)
         foreach (var slot in viewModel.InputSlots)

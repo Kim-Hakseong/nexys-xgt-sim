@@ -47,6 +47,11 @@ public static class NxpProjectFile
             watch.Resolve(project.Io.Addressing);
         }
 
+        foreach (var point in project.DigitalPoints)
+        {
+            point.Resolve(project.Io.Addressing);
+        }
+
         var json = JsonSerializer.Serialize(project, Options);
 
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));

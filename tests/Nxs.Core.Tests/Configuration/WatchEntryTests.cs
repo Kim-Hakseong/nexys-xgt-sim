@@ -40,6 +40,7 @@ public class WatchEntryTests : IDisposable
     [InlineData("%MD422")]
     [InlineData("%MX801")]
     [InlineData("%MB40")]
+    [InlineData("%ML50")]
     [InlineData("%IW80")]
     [InlineData("%QX1024")]
     [InlineData("%IX0.2.5")]
@@ -74,17 +75,27 @@ public class WatchEntryTests : IDisposable
                 new WatchEntry { Address = "%MW320", Label = "설정 압력", Format = WatchFormat.Decimal },
                 new WatchEntry { Address = "%MD422", Label = "적산 유량", Format = WatchFormat.Hex },
                 new WatchEntry { Address = "%MX801", Label = "운전 지령", Format = WatchFormat.Bool },
+                new WatchEntry
+                {
+                    Address = "%MD500", Label = "유량 (실수)",
+                    Format = WatchFormat.Float, Order = ByteOrder.Abcd,
+                },
+                new WatchEntry { Address = "%ML60", Label = "적산 (배정도)", Format = WatchFormat.Double },
             ],
         };
 
         NxpProjectFile.Save(path, project);
         var loaded = NxpProjectFile.Load(path);
 
-        Assert.Equal(3, loaded.Watches.Count);
+        Assert.Equal(5, loaded.Watches.Count);
         Assert.Equal("%MW320", loaded.Watches[0].Address);
         Assert.Equal("설정 압력", loaded.Watches[0].Label);
         Assert.Equal(WatchFormat.Hex, loaded.Watches[1].Format);
         Assert.Equal(WatchFormat.Bool, loaded.Watches[2].Format);
+        Assert.Equal(WatchFormat.Float, loaded.Watches[3].Format);
+        Assert.Equal(ByteOrder.Abcd, loaded.Watches[3].Order);
+        Assert.Equal(WatchFormat.Double, loaded.Watches[4].Format);
+        Assert.Equal(ByteOrder.Dcba, loaded.Watches[4].Order);
     }
 
     [Fact]
@@ -104,69 +115,38 @@ public class WatchEntryTests : IDisposable
     }
 
     [Fact]
-    public void FormatterRendersDecimalHexBinaryAndBool()
-    {
-        Assert.Equal("4660", WatchEntry.Render(0x1234, DataSize.Word, WatchFormat.Decimal));
-        Assert.Equal("0x1234", WatchEntry.Render(0x1234, DataSize.Word, WatchFormat.Hex));
-        Assert.Equal("0001 0010 0011 0100", WatchEntry.Render(0x1234, DataSize.Word, WatchFormat.Binary));
-        Assert.Equal("ON", WatchEntry.Render(1, DataSize.Bit, WatchFormat.Bool));
-        Assert.Equal("OFF", WatchEntry.Render(0, DataSize.Bit, WatchFormat.Bool));
-    }
-
-    [Fact]
-    public void SignedFormatShowsNegativeValuesForWordAndDWord()
-    {
-        Assert.Equal("-1", WatchEntry.Render(0xFFFF, DataSize.Word, WatchFormat.Signed));
-        Assert.Equal("-2", WatchEntry.Render(0xFFFFFFFE, DataSize.DWord, WatchFormat.Signed));
-        Assert.Equal("32767", WatchEntry.Render(0x7FFF, DataSize.Word, WatchFormat.Signed));
-    }
-
-    [Fact]
-    public void HexWidthMatchesTheDataSize()
-    {
-        Assert.Equal("0xAB", WatchEntry.Render(0xAB, DataSize.Byte, WatchFormat.Hex));
-        Assert.Equal("0x1234", WatchEntry.Render(0x1234, DataSize.Word, WatchFormat.Hex));
-        Assert.Equal("0x12345678", WatchEntry.Render(0x12345678, DataSize.DWord, WatchFormat.Hex));
-    }
-
-    [Fact]
-    public void ParseInputAcceptsDecimalHexAndBool()
-    {
-        Assert.Equal(4660u, WatchEntry.ParseInput("4660", DataSize.Word));
-        Assert.Equal(4660u, WatchEntry.ParseInput("0x1234", DataSize.Word));
-        Assert.Equal(4660u, WatchEntry.ParseInput("0X1234", DataSize.Word));
-        Assert.Equal(1u, WatchEntry.ParseInput("ON", DataSize.Bit));
-        Assert.Equal(0u, WatchEntry.ParseInput("off", DataSize.Bit));
-        Assert.Equal(1u, WatchEntry.ParseInput("true", DataSize.Bit));
-    }
-
-    [Fact]
-    public void ParseInputAcceptsNegativeValuesForSignedEntry()
-    {
-        Assert.Equal(0xFFFFu, WatchEntry.ParseInput("-1", DataSize.Word));
-        Assert.Equal(0xFFFFFFFEu, WatchEntry.ParseInput("-2", DataSize.DWord));
-    }
-
-    [Fact]
-    public void ParseInputRejectsGarbageAndOutOfRange()
-    {
-        Assert.Null(WatchEntry.ParseInput("헛소리", DataSize.Word));
-        Assert.Null(WatchEntry.ParseInput("", DataSize.Word));
-        Assert.Null(WatchEntry.ParseInput("70000", DataSize.Word));
-        Assert.Null(WatchEntry.ParseInput("256", DataSize.Byte));
-        Assert.Null(WatchEntry.ParseInput("-40000", DataSize.Word));
-    }
-
-    [Fact]
     public void WatchRoundTripsThroughMemory()
     {
         var memory = new PlcMemory();
-        var entry = new WatchEntry { Address = "%MD422" };
+        var entry = new WatchEntry { Address = "%MD422", Format = WatchFormat.Hex };
         var address = entry.Resolve();
 
         memory.WriteScalar(address, 0xDEADBEEF);
 
-        Assert.Equal("0xDEADBEEF", WatchEntry.Render(
-            memory.ReadScalar(address), address.Size, WatchFormat.Hex));
+        Assert.Equal("0xDEADBEEF",
+            WatchValue.Render(memory.ReadRaw(address), entry.Format, entry.Order));
+    }
+
+    [Fact]
+    public void LongWordWatchRoundTripsAsDouble()
+    {
+        var memory = new PlcMemory();
+        var entry = new WatchEntry { Address = "%ML50", Format = WatchFormat.Double };
+        var address = entry.Resolve();
+
+        var bytes = WatchValue.Parse("2.718281828459045", 8, entry.Format, entry.Order);
+        memory.WriteRaw(address, bytes!);
+
+        Assert.Equal("2.718281828459045",
+            WatchValue.Render(memory.ReadRaw(address), entry.Format, entry.Order));
+    }
+
+    [Fact]
+    public void ByteOrderIsPersistedPerEntry()
+    {
+        var entry = new WatchEntry { Address = "%MD422", Format = WatchFormat.Float, Order = ByteOrder.Abcd };
+
+        Assert.Equal(ByteOrder.Abcd, entry.Order);
+        Assert.Equal(ByteOrder.Dcba, new WatchEntry { Address = "%MW0" }.Order);
     }
 }

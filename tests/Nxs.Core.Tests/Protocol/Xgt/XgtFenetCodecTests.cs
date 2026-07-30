@@ -407,11 +407,39 @@ public class XgtFenetCodecTests
     }
 
     [Fact]
-    public void UnsupportedLWordDataTypeIsRejected()
+    public void LWordReadReturnsEightBytesLittleEndian()
+    {
+        // 데이터 타입 0x0004 = 롱워드. Double 값 지원을 위해 구현했다.
+        var (codec, memory) = NewCodec();
+        memory.WriteRaw(IecAddress.Parse("%ML10"),
+            [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+
+        var data = codec.Handle(Frame(ReadIndividualData(0x0004, "%ML10"))).ResponseFrame.AsSpan(20);
+
+        Assert.Equal(0x0000, ReadU16(data, 6));
+        Assert.Equal(8, ReadU16(data, 10));
+        Assert.Equal("01 02 03 04 05 06 07 08", Hex.Format(data.Slice(12, 8)));
+    }
+
+    [Fact]
+    public void LWordWriteStoresEightBytes()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(WriteIndividualData(
+            0x0004, ("%ML20", [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal("11 22 33 44 55 66 77 88",
+            Hex.Format(memory.ReadRaw(IecAddress.Parse("%ML20"))));
+    }
+
+    [Fact]
+    public void UnknownDataTypeCodeIsStillRejected()
     {
         var (codec, _) = NewCodec();
 
-        var exchange = codec.Handle(Frame(ReadIndividualData(0x0004, "%ML0")));
+        var exchange = codec.Handle(Frame(ReadIndividualData(0x0099, "%MW0")));
 
         Assert.Equal(PlcErrorReason.UnsupportedDataType, exchange.Reason);
     }

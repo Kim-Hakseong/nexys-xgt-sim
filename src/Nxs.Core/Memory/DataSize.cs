@@ -14,6 +14,9 @@ public enum DataSize
 
     /// <summary>더블워드 = 4바이트 (D).</summary>
     DWord,
+
+    /// <summary>롱워드 = 8바이트 (L). Double 값과 XGT 데이터 타입 0x0004 에 대응한다.</summary>
+    LWord,
 }
 
 /// <summary>크기 지정자별 비트 폭 헬퍼.</summary>
@@ -26,6 +29,7 @@ public static class DataSizeExtensions
         DataSize.Byte => 8,
         DataSize.Word => 16,
         DataSize.DWord => 32,
+        DataSize.LWord => 64,
         _ => throw new ArgumentOutOfRangeException(nameof(size), size, "알 수 없는 크기 지정자"),
     };
 
@@ -36,6 +40,7 @@ public static class DataSizeExtensions
         DataSize.Byte => 'B',
         DataSize.Word => 'W',
         DataSize.DWord => 'D',
+        DataSize.LWord => 'L',
         _ => throw new ArgumentOutOfRangeException(nameof(size), size, "알 수 없는 크기 지정자"),
     };
 }

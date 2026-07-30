@@ -53,6 +53,17 @@ public class TabRenderTests
                 new WatchEntry { Address = "%MW320", Label = "설정 압력" },
                 new WatchEntry { Address = "%MD422", Label = "적산 유량", Format = WatchFormat.Hex },
                 new WatchEntry { Address = "%MX801", Label = "운전 지령", Format = WatchFormat.Bool },
+                new WatchEntry
+                {
+                    Address = "%MD500", Label = "유량 (실수)",
+                    Format = WatchFormat.Float, Order = ByteOrder.Abcd,
+                },
+                new WatchEntry { Address = "%ML60", Label = "적산 (배정도)", Format = WatchFormat.Double },
+            ],
+            DigitalPoints =
+            [
+                new DigitalPointEntry { Address = "%MX900", Label = "운전 지령", Mode = DigitalPointMode.Input },
+                new DigitalPointEntry { Address = "%QX2000", Label = "운전 상태", Mode = DigitalPointMode.Output },
             ],
         };
 
@@ -106,6 +117,7 @@ public class TabRenderTests
             .Select(t => t.Text ?? string.Empty).ToList();
         Assert.Contains("%MW320", texts);
         Assert.Contains("%MD422", texts);
+        Assert.Contains("%ML60", texts);
         Assert.Contains("설정 압력", texts);
 
         // 제거 버튼이 실체화되고 커맨드가 연결되어 동작해야 한다.
@@ -118,6 +130,32 @@ public class TabRenderTests
         vm.Watches[0].RemoveCommand.Execute(null);
         Assert.Equal(before - 1, vm.Watches.Count);
 
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void DigitalTabsRealiseTheirCustomPointRows()
+    {
+        var vm = BuildPopulatedViewModel();
+        var window = new MainWindow { DataContext = vm, Width = 1240, Height = 860 };
+        window.Show();
+        var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
+
+        foreach (var (index, address) in new[] { (0, "%MX900"), (1, "%QX2000") })
+        {
+            tabControl.SelectedIndex = index;
+            Dispatcher.UIThread.RunJobs();
+            window.Measure(new Avalonia.Size(window.Width, window.Height));
+            window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
+            Dispatcher.UIThread.RunJobs();
+
+            var texts = window.GetVisualDescendants().OfType<TextBlock>()
+                .Select(t => t.Text ?? string.Empty).ToList();
+            Assert.Contains(address, texts);
+        }
+
+        Assert.Single(vm.CustomInputPoints);
+        Assert.Single(vm.CustomOutputPoints);
         vm.Shutdown();
     }
 
