@@ -4,6 +4,7 @@
         x:Class="Nxs.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Nexys XGT Simulator"
+        Icon="/Assets/app.ico"
         Width="1180" Height="820"
         MinWidth="900" MinHeight="600">
 
@@ -297,15 +298,24 @@
       </TabItem>
     </TabControl>
 
-    <!-- 상태바 -->
-    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="4,10,4,0">
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+    <!-- 하단 상태 라인 + 로고/저작권 (원본 nexys-modbus-workbench 푸터 이식) -->
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="4,10,4,2">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="18" VerticalAlignment="Center">
+        <TextBlock Classes="muted mono" Text="{Binding ServerStatusText}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted mono" Text="{Binding TrafficSummary}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted mono" Text="{Binding ProjectPath}" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" MaxWidth="260" />
         <TextBlock Classes="muted" Text="{Binding StatusMessage}" VerticalAlignment="Center" />
         <TextBlock Classes="error" Text="{Binding ErrorMessage}" VerticalAlignment="Center"
                    TextWrapping="Wrap" />
       </StackPanel>
-      <TextBlock Grid.Column="1" Classes="muted mono" Text="{Binding ProjectPath}"
-                 VerticalAlignment="Center" />
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <TextBlock Text="© 2026 NEXYS · MIT licensed" Classes="muted" FontSize="11"
+                   VerticalAlignment="Center" />
+        <Image Source="/Assets/nexys-logo.png" Height="14" VerticalAlignment="Center"
+               RenderOptions.BitmapInterpolationMode="HighQuality" />
+      </StackPanel>
     </Grid>
   </Grid>
 </Window>
