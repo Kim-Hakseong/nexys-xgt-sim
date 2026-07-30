@@ -39,9 +39,13 @@ public static class NxpProjectFile
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(project);
 
-        // 저장 전 검증: 매핑이 성립하고 서버 설정이 유효해야 한다.
+        // 저장 전 검증: 매핑이 성립하고 서버 설정과 워치 주소가 유효해야 한다.
         project.Io.BuildMap();
         project.Server.ToServerOptions();
+        foreach (var watch in project.Watches)
+        {
+            watch.Resolve(project.Io.Addressing);
+        }
 
         var json = JsonSerializer.Serialize(project, Options);
 

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using Nxs.Core.Diagnostics;
+using Nxs.Core.Fixtures;
 using Nxs.Core.Protocol;
 using Nxs.Core.Time;
 
@@ -30,6 +31,7 @@ public sealed class PlcTcpServer : IAsyncDisposable
     private readonly ITimeSource _time;
     private readonly ITrafficSink? _traffic;
     private readonly ConcurrentDictionary<string, TcpClient> _clients = new();
+    private readonly FrameRecorder? _recorder;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
 
     private TcpListener? _listener;
@@ -43,11 +45,16 @@ public sealed class PlcTcpServer : IAsyncDisposable
     /// <param name="options">바인딩·한계 설정.</param>
     /// <param name="timeSource">시간 원천. 기본은 시스템 시계.</param>
     /// <param name="trafficSink">트래픽 기록처. null이면 기록하지 않는다.</param>
+    /// <param name="frameRecorder">
+    /// 수신 프레임 자동 캡처기. null이면 캡처하지 않는다.
+    /// 마스터의 실제 프레임을 근거로 남겨 spec 검증을 돕는다.
+    /// </param>
     public PlcTcpServer(
         IFrameCodec codec,
         PlcTcpServerOptions options,
         ITimeSource? timeSource = null,
-        ITrafficSink? trafficSink = null)
+        ITrafficSink? trafficSink = null,
+        FrameRecorder? frameRecorder = null)
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(options);
@@ -57,6 +64,7 @@ public sealed class PlcTcpServer : IAsyncDisposable
         _options = options;
         _time = timeSource ?? new SystemTimeSource();
         _traffic = trafficSink;
+        _recorder = frameRecorder;
     }
 
     /// <summary>실제로 바인딩된 종점. 미시작이면 null. 포트 0으로 시작하면 OS 배정 포트가 보인다.</summary>
@@ -227,6 +235,12 @@ public sealed class PlcTcpServer : IAsyncDisposable
                     var exchange = _codec.Handle(frame);
 
                     Record(TrafficDirection.Rx, id, frame, exchange.RequestSummary, exchange.Reason);
+
+                    if (_recorder is not null
+                        && _recorder.Record(frame, exchange.ResponseFrame, exchange.RequestSummary))
+                    {
+                        Note($"프레임 자동 캡처: {exchange.RequestSummary}", id);
+                    }
 
                     if (exchange.IsSilent)
                     {

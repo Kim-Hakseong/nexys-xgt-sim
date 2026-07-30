@@ -31,8 +31,9 @@ public static class Program
         (0, "01-digital-input"),
         (1, "02-digital-output"),
         (2, "03-analog-input"),
-        (3, "04-automation"),
-        (5, "06-rack-config"),
+        (3, "04-watch"),
+        (4, "05-automation"),
+        (6, "07-rack-config"),
     ];
 
     public static int Main(string[] args)
@@ -137,20 +138,20 @@ public static class Program
         Settle(window);
 
         var tabControl = window.GetLogicalDescendants().OfType<TabControl>().First();
-        tabControl.SelectedIndex = 4;
+        tabControl.SelectedIndex = 5;
         Settle(window);
 
-        var path = Path.Combine(outputDirectory, "05-traffic-log.png");
+        var path = Path.Combine(outputDirectory, "06-traffic-log.png");
         using var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {
-            Console.Error.WriteLine("렌더 실패: 05-traffic-log");
+            Console.Error.WriteLine("렌더 실패: 06-traffic-log");
             viewModel.Shutdown();
             return false;
         }
 
         frame.Save(path);
-        Console.WriteLine($"05-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
+        Console.WriteLine($"06-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
         viewModel.Shutdown();
         return true;
     }
@@ -207,7 +208,41 @@ public static class Program
             ],
         };
 
-        var viewModel = new MainWindowViewModel(project);
+        // 운영 배포와 동일하게 XGT 코덱을 주입한다 → 화면도 실제와 같은 상태
+        // (서버는 켤 수 있고, 미검증 초안 경고가 뜬다).
+        var viewModel = new MainWindowViewModel(
+            project,
+            memory => new Core.Protocol.Xgt.XgtFenetCodec(new Core.Protocol.PlcRequestExecutor(memory)));
+
+        // 워치 목록 — LabVIEW 가 교신할 임의 주소 표본
+        foreach (var (address, label, format) in new (string, string, WatchFormat)[]
+        {
+            ("%MW320", "설정 압력", WatchFormat.Decimal),
+            ("%MD422", "적산 유량", WatchFormat.Hex),
+            ("%MX801", "운전 지령", WatchFormat.Bool),
+            ("%MW500", "모터 회전수", WatchFormat.Decimal),
+            ("%MW501", "온도 (부호)", WatchFormat.Signed),
+            ("%MB40", "상태 비트맵", WatchFormat.Binary),
+        })
+        {
+            viewModel.NewWatchAddress = address;
+            viewModel.NewWatchLabel = label;
+            viewModel.AddWatchCommand.Execute(null);
+            viewModel.Watches[^1].PendingFormat = format;
+        }
+
+        // 값을 먼저 넣고 형식을 나중에 적용한다 — 형식 변경이 값을 그 형식으로 다시 렌더한다.
+        viewModel.Watches[0].ValueText = "1250";
+        viewModel.Watches[1].ValueText = "316145";
+        viewModel.Watches[2].ValueText = "1";
+        viewModel.Watches[3].ValueText = "1780";
+        viewModel.Watches[4].ValueText = "-125";
+        viewModel.Watches[5].ValueText = "165";
+
+        foreach (var row in viewModel.Watches)
+        {
+            row.Format = row.PendingFormat;
+        }
 
         // 입력 점: 결정적 패턴 (3의 배수 ON)
         foreach (var slot in viewModel.InputSlots)

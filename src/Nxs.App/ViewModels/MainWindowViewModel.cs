@@ -5,8 +5,10 @@ using CommunityToolkit.Mvvm.Input;
 using Nxs.Core.Automation;
 using Nxs.Core.Configuration;
 using Nxs.Core.Diagnostics;
+using Nxs.Core.Fixtures;
 using Nxs.Core.Memory;
 using Nxs.Core.Protocol;
+using Nxs.Core.Protocol.Xgt;
 using Nxs.Core.Simulator;
 
 namespace Nxs.App.ViewModels;
@@ -16,6 +18,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly Func<PlcMemory, IFrameCodec>? _codecFactory;
     private readonly TrafficLog _trafficLog;
+    private readonly FrameRecorder? _frameRecorder;
 
     [ObservableProperty]
     private bool _showErrorsOnly;
@@ -45,14 +48,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// 테스트는 합성 코덱을 주입해 e2e 스모크를 수행한다.
     /// </param>
     /// <param name="trafficLog">트래픽 로그. null이면 새로 만든다.</param>
+    /// <param name="frameRecorder">수신 프레임 자동 캡처기.</param>
     public MainWindowViewModel(
         NxpProject? project = null,
         Func<PlcMemory, IFrameCodec>? codecFactory = null,
-        TrafficLog? trafficLog = null)
+        TrafficLog? trafficLog = null,
+        FrameRecorder? frameRecorder = null)
     {
         _codecFactory = codecFactory;
         _trafficLog = trafficLog ?? new TrafficLog();
-        LoadProject(project ?? NxpProject.CreateDefault(port: 2004));
+        _frameRecorder = frameRecorder;
+        LoadProject(project ?? NxpProject.CreateDefault(port: XgtFenetOptions.DefaultPort));
     }
 
     /// <summary>트래픽 로그 (PRD X-07).</summary>
@@ -78,6 +84,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     /// <summary>트래픽 로그 행.</summary>
     public ObservableCollection<TrafficRowViewModel> TrafficRows { get; } = [];
+
+    /// <summary>사용자 지정 워치 목록.</summary>
+    public ObservableCollection<WatchRowViewModel> Watches { get; } = [];
+
+    /// <summary>워치가 하나라도 있는지.</summary>
+    public bool HasWatches => Watches.Count > 0;
+
+    /// <summary>코덱이 미검증 초안인지 — 경고 배너 표시용.</summary>
+    public bool IsCodecDraft => CanStartServer && XgtFenetCodec.IsDraft;
+
+    /// <summary>미검증 초안 코덱 경고 문구.</summary>
+    public string CodecDraftWarning => XgtFenetCodec.DraftWarning;
+
+    /// <summary>자동 캡처된 프레임 수 안내.</summary>
+    public string CaptureSummary => _frameRecorder is null
+        ? "프레임 자동 캡처 꺼짐"
+        : $"프레임 자동 캡처 {_frameRecorder.SavedCount}건 → fixtures/labview-capture/";
 
     /// <summary>자동화 루프 실행 여부.</summary>
     public bool IsAutomationRunning => Engine.IsAutomationRunning;
@@ -184,6 +207,65 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(AutomationToggleLabel));
     }
 
+    /// <summary>새 워치 주소 입력값.</summary>
+    [ObservableProperty]
+    private string _newWatchAddress = string.Empty;
+
+    /// <summary>새 워치 별칭 입력값.</summary>
+    [ObservableProperty]
+    private string _newWatchLabel = string.Empty;
+
+    /// <summary>워치 목록에 주소를 추가한다.</summary>
+    [RelayCommand]
+    private void AddWatch()
+    {
+        ErrorMessage = null;
+        var address = NewWatchAddress.Trim();
+
+        if (!WatchEntry.IsValid(address))
+        {
+            ErrorMessage = $"주소를 해석할 수 없습니다: '{address}' " +
+                "(예: %MW320, %MD422, %MX801, %IW80, %QX1024)";
+            return;
+        }
+
+        var entry = new WatchEntry { Address = address, Label = NewWatchLabel.Trim() };
+        var resolved = entry.Resolve(Engine.Io.Addressing);
+
+        if (Watches.Any(w => w.Address.Area == resolved.Area
+            && w.Address.Size == resolved.Size
+            && w.Address.Offset == resolved.Offset))
+        {
+            ErrorMessage = $"'{resolved.Text}' 는 이미 목록에 있습니다.";
+            return;
+        }
+
+        try
+        {
+            Watches.Add(new WatchRowViewModel(Engine.Memory, entry, Engine.Io.Addressing, RemoveWatchRow));
+        }
+        catch (AddressRangeException ex)
+        {
+            ErrorMessage = ex.Message;
+            return;
+        }
+
+        NewWatchAddress = string.Empty;
+        NewWatchLabel = string.Empty;
+        OnPropertyChanged(nameof(HasWatches));
+        StatusMessage = $"워치 추가: {resolved.Text}";
+    }
+
+    /// <summary>워치 항목을 제거한다(행의 제거 커맨드가 호출한다).</summary>
+    public void RemoveWatchRow(WatchRowViewModel? row)
+    {
+        if (row is not null && Watches.Remove(row))
+        {
+            OnPropertyChanged(nameof(HasWatches));
+            StatusMessage = $"워치 제거: {row.AddressText}";
+        }
+    }
+
     /// <summary>트래픽 로그를 비운다.</summary>
     [RelayCommand]
     private void ClearTraffic()
@@ -253,7 +335,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
             slot.Refresh();
         }
 
+        foreach (var watch in Watches)
+        {
+            watch.Refresh();
+        }
+
         RefreshTraffic();
+        OnPropertyChanged(nameof(CaptureSummary));
         NotifyServerState();
         OnPropertyChanged(nameof(IsAutomationRunning));
         OnPropertyChanged(nameof(AutomationToggleLabel));
@@ -322,13 +410,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             AutomationRules = AutomationRules
                 .Select(vm => AutomationRuleSettings.FromRule(vm.Rule with { IsEnabled = vm.IsEnabled }))
                 .ToArray(),
+            Watches = Watches.Select(w => w.ToEntry()).ToArray(),
         };
     }
 
     private void LoadProject(NxpProject project)
     {
         Engine?.Dispose();
-        Engine = new SimulatorEngine(project, _codecFactory, trafficSink: _trafficLog);
+        Engine = new SimulatorEngine(
+            project, _codecFactory, trafficSink: _trafficLog, frameRecorder: _frameRecorder);
 
         BindAddressText = project.Server.BindAddress;
         PortText = project.Server.Port.ToString(CultureInfo.InvariantCulture);
@@ -382,6 +472,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
             AutomationRules.Add(ruleVm);
         }
 
+        Watches.Clear();
+        foreach (var entry in project.Watches)
+        {
+            try
+            {
+                Watches.Add(new WatchRowViewModel(Engine.Memory, entry, project.Io.Addressing, RemoveWatchRow));
+            }
+            catch (Exception ex) when (ex is FormatException or AddressRangeException)
+            {
+                // 프로젝트의 워치 하나가 잘못돼도 나머지는 열려야 한다.
+                ErrorMessage = $"워치 '{entry.Address}' 를 건너뜀: {ex.Message}";
+            }
+        }
+
+        OnPropertyChanged(nameof(HasWatches));
         OnPropertyChanged(nameof(RackSummary));
         OnPropertyChanged(nameof(HasAutomationRules));
         OnPropertyChanged(nameof(IsAutomationRunning));
@@ -395,6 +500,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanStartServer));
         OnPropertyChanged(nameof(ServerUnavailableReason));
         OnPropertyChanged(nameof(ShowServerUnavailableNotice));
+        OnPropertyChanged(nameof(IsCodecDraft));
         OnPropertyChanged(nameof(ServerStatusText));
         OnPropertyChanged(nameof(StartStopLabel));
     }

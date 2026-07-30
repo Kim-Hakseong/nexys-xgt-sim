@@ -2,6 +2,7 @@ using System.Net;
 using Nxs.Core.Automation;
 using Nxs.Core.Configuration;
 using Nxs.Core.Diagnostics;
+using Nxs.Core.Fixtures;
 using Nxs.Core.Memory;
 using Nxs.Core.Protocol;
 using Nxs.Core.Server;
@@ -25,6 +26,7 @@ public sealed class SimulatorEngine : IDisposable
     private readonly Func<PlcMemory, IFrameCodec>? _codecFactory;
     private readonly ITimeSource _time;
     private readonly ITrafficSink? _traffic;
+    private readonly FrameRecorder? _recorder;
 
     private PlcTcpServer? _server;
     private ServerSettings _serverSettings;
@@ -38,12 +40,14 @@ public sealed class SimulatorEngine : IDisposable
     /// </param>
     /// <param name="timeSource">시간 원천. 기본은 시스템 시계.</param>
     /// <param name="trafficSink">트래픽 기록처.</param>
+    /// <param name="frameRecorder">수신 프레임 자동 캡처기(마스터 실제 프레임을 근거로 남긴다).</param>
     /// <exception cref="IoConfigurationException">구성이 주소 산법과 모순될 때.</exception>
     public SimulatorEngine(
         NxpProject project,
         Func<PlcMemory, IFrameCodec>? codecFactory,
         ITimeSource? timeSource = null,
-        ITrafficSink? trafficSink = null)
+        ITrafficSink? trafficSink = null,
+        FrameRecorder? frameRecorder = null)
     {
         ArgumentNullException.ThrowIfNull(project);
 
@@ -51,6 +55,7 @@ public sealed class SimulatorEngine : IDisposable
         _codecFactory = codecFactory;
         _time = timeSource ?? new SystemTimeSource();
         _traffic = trafficSink;
+        _recorder = frameRecorder;
         _serverSettings = project.Server;
 
         // 구성이 성립하지 않으면 여기서 실패한다 — 반쯤 열린 프로젝트를 만들지 않는다.
@@ -169,7 +174,7 @@ public sealed class SimulatorEngine : IDisposable
         }
 
         _server = new PlcTcpServer(
-            _codecFactory(Memory), _serverSettings.ToServerOptions(), _time, _traffic);
+            _codecFactory(Memory), _serverSettings.ToServerOptions(), _time, _traffic, _recorder);
         await _server.StartAsync(cancellationToken).ConfigureAwait(false);
     }
 

@@ -84,6 +84,11 @@ public sealed record NxpProject
     /// <summary>자동화 룰 목록 (PRD X-06).</summary>
     public IReadOnlyList<Automation.AutomationRuleSettings> AutomationRules { get; init; } = [];
 
+    /// <summary>
+    /// 사용자 지정 워치 목록 — 랙 매핑 밖의 임의 주소(%MW320, %MD422 …)를 직접 보고 쓴다.
+    /// </summary>
+    public IReadOnlyList<WatchEntry> Watches { get; init; } = [];
+
     /// <summary>CONTEXT 기재 랙 기반 기본 프로젝트를 만든다.</summary>
     public static NxpProject CreateDefault(int port) => new()
     {

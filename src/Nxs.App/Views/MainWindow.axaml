@@ -59,14 +59,24 @@
       </Grid>
     </Border>
 
-    <!-- ⛔ spec 게이트 안내 -->
-    <Border Grid.Row="1" Classes="notice" Margin="0,0,0,12"
-            IsVisible="{Binding ShowServerUnavailableNotice}">
-      <StackPanel Spacing="4">
-        <TextBlock Text="FEnet 서버를 켤 수 없습니다" FontWeight="SemiBold" FontSize="13" />
-        <TextBlock Text="{Binding ServerUnavailableReason}" TextWrapping="Wrap" FontSize="12" />
-      </StackPanel>
-    </Border>
+    <!-- ⛔ spec 게이트 안내 / ⚠️ 미검증 초안 코덱 안내 -->
+    <StackPanel Grid.Row="1">
+      <Border Classes="notice" Margin="0,0,0,12"
+              IsVisible="{Binding ShowServerUnavailableNotice}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="FEnet 서버를 켤 수 없습니다" FontWeight="SemiBold" FontSize="13" />
+          <TextBlock Text="{Binding ServerUnavailableReason}" TextWrapping="Wrap" FontSize="12" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="notice" Margin="0,0,0,12" IsVisible="{Binding IsCodecDraft}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="미검증 초안 코덱으로 동작 중입니다" FontWeight="SemiBold" FontSize="13" />
+          <TextBlock Text="{Binding CodecDraftWarning}" TextWrapping="Wrap" FontSize="12" />
+          <TextBlock Classes="muted mono" Text="{Binding CaptureSummary}" FontSize="11" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
 
     <!-- 랙 패널 -->
     <TabControl Grid.Row="2">
@@ -196,6 +206,73 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
+      </TabItem>
+
+      <!-- 워치: 사용자 지정 임의 주소 (%MW320, %MD422 …) -->
+      <TabItem Header="주소 워치">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Border Grid.Row="0" Classes="card" Padding="16" Margin="0,0,0,12">
+            <StackPanel Spacing="8">
+              <TextBlock Classes="sectionTitle" Text="주소 추가" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="LabVIEW 가 실제로 교신하는 주소를 직접 지정한다. 랙 매핑과 무관한 %M 영역도 된다. 예: %MW320 · %MD422 · %MX801 · %MB40 · %IW80 · %QX1024" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="주소" />
+                  <TextBox Classes="mono" Width="150" Text="{Binding NewWatchAddress}"
+                           Watermark="%MW320" />
+                </StackPanel>
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="fieldLabel" Text="별칭 (선택)" />
+                  <TextBox Width="220" Text="{Binding NewWatchLabel}" Watermark="설정 압력" />
+                </StackPanel>
+                <Button Classes="accent" Content="추가" Command="{Binding AddWatchCommand}"
+                        VerticalAlignment="Bottom" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Grid.Row="1" Classes="softCard" Padding="14" Margin="0,0,0,12"
+                  IsVisible="{Binding !HasWatches}">
+            <TextBlock Classes="muted" TextWrapping="Wrap"
+                       Text="아직 워치가 없습니다. 위에 주소를 넣어 추가하면 값을 실시간으로 보고 직접 쓸 수 있습니다. [프로젝트 저장] 하면 목록이 .nxp 에 함께 저장됩니다." />
+          </Border>
+
+          <ScrollViewer Grid.Row="2" IsVisible="{Binding HasWatches}">
+            <ItemsControl ItemsSource="{Binding Watches}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:WatchRowViewModel">
+                  <Border Classes="card" Padding="14" Margin="0,0,0,8">
+                    <Grid ColumnDefinitions="130,64,*,190,150,Auto" >
+                      <TextBlock Grid.Column="0" Classes="mono" Text="{Binding AddressText}"
+                                 FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                      <Border Grid.Column="1" Classes="pill" Padding="7,3" Margin="0,0,10,0"
+                              VerticalAlignment="Center" HorizontalAlignment="Left">
+                        <TextBlock Classes="mono" Text="{Binding SizeText}" FontSize="10" />
+                      </Border>
+                      <TextBlock Grid.Column="2" Classes="muted" Text="{Binding Label}"
+                                 VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <StackPanel Grid.Column="3" Spacing="2" Margin="0,0,10,0">
+                        <TextBox Classes="mono" Text="{Binding ValueText}" />
+                        <TextBlock Classes="error" Text="{Binding Error}" FontSize="11"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                      </StackPanel>
+                      <ComboBox Grid.Column="4" ItemsSource="{Binding Formats}"
+                                SelectedItem="{Binding Format}" Margin="0,0,10,0"
+                                VerticalAlignment="Top" />
+                      <Button Grid.Column="5" VerticalAlignment="Top"
+                              ToolTip.Tip="이 워치 제거"
+                              Command="{Binding RemoveCommand}">
+                        <PathIcon Data="{StaticResource IconRemove}" />
+                      </Button>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
       </TabItem>
 
       <!-- 값 자동화 -->

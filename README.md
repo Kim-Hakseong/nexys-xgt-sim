@@ -3,54 +3,42 @@
 LS XGT PLC(XGI CPU) 시뮬레이터. 실장비 없이 **LabVIEW 애플리케이션을 검증**하기 위해 PLC 역할을 대신한다.
 XG5000은 실장비 없이 시뮬레이션이 불가능하므로 그 공백을 메운다.
 
-C# 12 / .NET 8 · Avalonia 11 · 테스트 239개 · 빌드 경고 0
+C# 12 / .NET 8 · Avalonia 11 · 테스트 325개 · 빌드 경고 0
 
 ![디지털 입력 패널](docs/screenshots/01-digital-input.png)
 
 ---
 
-## ⚠️ 먼저 읽을 것 — 지금은 LabVIEW가 접속할 수 없다
+## ⚠️ 먼저 읽을 것 — FEnet 서버는 동작하지만 **미검증 초안**이다
 
-**XGT FEnet 프레임 코덱이 구현되지 않아 서버를 켤 수 없다.** 프로토콜 근거가 저장소에 없기 때문이다.
+**LabVIEW 접속을 받는다.** XGT FEnet 코덱(TCP 2004)이 구현되어 개별/연속 읽기·쓰기와 에러 응답까지 왕복한다.
 
-`spec/xgt-fenet-reference.md` 는 아직 "채울 내용" 목차만 있고 6개 항목이 모두 비어 있다 —
-헤더 레이아웃 / 명령 코드·데이터 타입 코드 표 / 변수명 표기 규칙 / 에러 상태 코드 표 / 예제 프레임 / 기본 포트.
+다만 `spec/xgt-fenet-reference.md` 는 **사내 매뉴얼 대조 없이 작성된 초안**이다. 저장소 소유자가
+`CLAUDE.md` §3(조작 제로 원칙)을 명시적으로 완화해 "먼저 만들고 나중에 검증" 방식을 선택한 결과다.
+따라서 **접속되더라도 값·에러 코드가 실장비와 다를 수 있다.** 앱이 이 상태를 화면 상단에 표시한다.
 
-이 프로젝트는 **프레임 구조를 기억이나 추측으로 구현하는 것을 금지한다**(`CLAUDE.md` §3, 조작 제로 원칙).
-그럴듯하지만 틀린 프레임은 "LabVIEW가 실장비와 구분 못 할 것"이라는 목표를 정면으로 배반하고,
-LabVIEW 쪽 버그를 시뮬레이터 버그로 오진하게 만든다. 그래서 **비워 두었고, 앱이 그 사실을 화면에 표시한다.**
+위험을 구조적으로 줄이기 위해 코덱은 이렇게 설계했다:
 
-> 게이트는 **서버에만** 걸려 있다. 랙 패널·값 자동화·프로젝트 파일은 지금도 전부 동작한다.
+| 원칙 | 이유 |
+|---|---|
+| 신뢰도 낮은 헤더 필드(CPU Info·Position)는 **요청 값을 에코** | 정답을 몰라도 실장비처럼 답할 수 있다 — 맞혀야 하는 값의 수를 줄인다 |
+| 수신 BCC 는 **기본 검사 안 함** | 계산 범위가 미확정이라, 틀린 범위로 검사하면 정상 요청을 전부 거절해 "접속 불가"로 보인다 |
+| 에러 코드·쓰기 배치·한계값은 **설정으로 노출** | 재컴파일 없이 실장비와 맞춘다 (`XgtFenetOptions`) |
+| 해석 실패는 예외가 아니라 **에러 응답** | 연결을 유지해 트래픽 로그로 계속 진단할 수 있다 |
 
-### 게이트를 푸는 방법
+### 검증하는 방법 — 접속만 하면 자동으로 근거가 모인다
 
-**A. 매뉴얼 발췌 (권장)** — `spec/xgt-fenet-reference.md` 의 6개 항목을 XGT FEnet I/F 사용설명서에서 발췌(출처 페이지 명기).
+**시뮬레이터는 수신한 프레임을 `fixtures/labview-capture/` 에 자동 캡처한다.**
+LabVIEW 를 한 번 붙이는 것만으로 검증 자료가 쌓인다 — 별도 `nc` 캡처 절차가 필요 없다.
 
-**B. LabVIEW 캡처 (장비 불필요 · 30분)** — 완성된 LabVIEW 코드는 **이미 정답 요청 프레임을 생성한다.**
+1. 시뮬레이터를 켜고 LabVIEW 를 붙인다
+2. `fixtures/labview-capture/req_00_*.bin` 과 `.txt`(hex 해설)가 생긴다
+3. `spec/xgt-fenet-reference.md` §8 절차로 헤더를 대조한다 — 특히 **Length 필드 의미**(전체 길이 - 20 == Length?)
+4. 매뉴얼의 **에러 코드 표**로 `§5` 잠정값을 교체한다 (가장 위험한 지점)
+5. 전 항목이 확인되면 `XgtFenetCodec.IsDraft` 를 `false` 로 → 경고가 사라진다
 
-```bash
-# 1. 더미 리스너를 띄운다 (LabVIEW가 실장비에 접속할 때 쓰는 포트로)
-nc -l 2004 > fixtures/labview-capture/req_read.bin
-
-# 2. LabVIEW 앱의 대상 IP를 127.0.0.1 로 바꾸고 읽기 동작을 수행한다
-# 3. 동작별로 파일을 나눠 모은다 (req_read.bin, req_write.bin, ...)
-# 4. 각 요청의 기대 응답을 매뉴얼과 대조해 같은 이름 .expected 로 작성한다
-```
-
-> ⚠️ `.expected` 에 시뮬레이터 출력을 복사하면 안 된다. 회귀가 자기 자신을 검증하는 셈이 되어 무의미해진다.
-
-`.bin` 을 넣으면 회귀 스위트가 **자동 편입**되고, 코덱이 아직 없으면
-"캡처는 있지만 코덱이 없다"고 **실패로 알린다**(조용히 통과하지 않는다).
-
-### 근거가 도착한 뒤 할 일
-
-`IFrameCodec` 구현체 **한 개**만 추가하면 된다. 서버·프레이밍 상태머신·요청 실행기·메모리·UI·자동화는
-모두 프로토콜을 모르게 만들어 두었으므로 손댈 필요가 없다.
-
-1. `src/Nxs.Core/Protocol/IFrameCodec.cs` 구현 — 헤더 레이아웃·명령 코드·에러 코드 매핑·Invoke ID 에코를 그 안에
-2. 프레임 경계 규칙은 `IFrameLengthRule` 로 함께 구현
-3. `src/Nxs.App/App.axaml.cs` 에서 `MainWindowViewModel` 생성 시 `codecFactory` 로 넘긴다
-4. `tests/.../LabViewCaptureRegressionTests.XgtCodecFactory` 에 연결 → 캡처 회귀가 살아난다
+> ⚠️ 자동 캡처는 시뮬레이터 응답을 `.actual` 로 저장한다. **`.expected` 로 복사하지 말 것** —
+> 회귀가 자기 자신을 검증하는 셈이 되어 아무것도 잡지 못한다. `.expected` 는 매뉴얼 대조 확정본만 넣는다.
 
 ---
 
@@ -80,13 +68,14 @@ dotnet run --project src/Nxs.App
 ### 처음 켤 때 (5분)
 
 - [ ] `Nxs.App.exe` 실행 — 설치 과정 없이 창이 뜬다
-- [ ] 상단 **⛔ 배너**를 확인한다 (현재는 FEnet 코덱 부재 안내가 뜬다)
+- [ ] 상단 **⚠️ 배너**를 확인한다 (현재는 "미검증 초안 코덱" 안내가 뜬다)
 - [ ] **"랙 구성"** 탭에서 슬롯별 할당 주소가 XG5000 I/O 파라미터와 일치하는지 대조한다
       → 다르면 `.nxp` 의 `addressing.slotPoints` 를 실제 값으로 맞춘다
 - [ ] **"디지털 입력"** 탭에서 점 하나를 토글해 본다 (즉시 메모리에 반영된다)
 - [ ] **"A/D 입력"** 탭 채널에 값을 넣어 raw 변환이 맞는지 확인한다
+- [ ] **"주소 워치"** 탭에 LabVIEW 가 실제로 읽고 쓰는 주소를 추가한다 (예: `%MW320`, `%MD422`)
 
-### LabVIEW를 붙일 때 (코덱 필요)
+### LabVIEW를 붙일 때
 
 - [ ] **바인딩 IP** 를 정한다 — 다른 PC에서 접속하려면 `0.0.0.0`
       (⚠️ `127.0.0.1` 로 두면 다른 PC에서 접속 불가 — 접속 실패의 가장 흔한 원인)
@@ -96,7 +85,9 @@ dotnet run --project src/Nxs.App
 - [ ] LabVIEW에서 연결 → 접속 수가 **1** 로 증가, "트래픽 로그"에 RX 행이 뜬다
 - [ ] 입력 점 토글 → LabVIEW 화면에 반영되는지 확인 (**읽기** 경로)
 - [ ] LabVIEW에서 출력 ON → "디지털 출력" LED가 켜지는지 확인 (**쓰기** 경로)
+- [ ] "주소 워치" 탭에서 LabVIEW 가 쓰는 값이 실시간으로 바뀌는지 확인 (**티키타카 확인의 핵심**)
 - [ ] 범위 밖 주소를 읽어 오류 응답을 받고도 **연결이 유지되는지** 확인
+- [ ] `fixtures/labview-capture/` 에 자동 캡처 파일이 생겼는지 확인 → spec 검증에 쓴다
 
 전체 절차와 증상별 원인 표는 **[`LABVIEW_CHECKLIST.md`](LABVIEW_CHECKLIST.md)** 에 있다.
 배포 전 스모크 항목은 **[`SMOKE_CHECKLIST.md`](SMOKE_CHECKLIST.md)**.
@@ -125,25 +116,34 @@ dotnet run --project src/Nxs.App
 
 ![A/D 입력 패널](docs/screenshots/03-analog-input.png)
 
+### 주소 워치 — LabVIEW 가 교신하는 임의 주소를 직접 지정
+
+랙 매핑과 무관한 `%M` 영역도 된다. 주소를 넣고 별칭을 붙이면 값을 실시간으로 보고 직접 쓸 수 있다.
+표시 형식은 10진 / 부호 있는 10진 / 16진 / 2진 / ON·OFF 중에 고른다.
+입력도 `4660` · `0x1234` · `-125` · `ON` 을 모두 받는다. 목록은 `.nxp` 에 저장된다.
+
+![주소 워치](docs/screenshots/04-watch.png)
+
 ### 값 자동화 — tick 순수 함수 제너레이터
 
 각 룰은 개별 on/off 가능하고, `tick 0..7` 미리보기로 값이 어떻게 움직일지 미리 확인할 수 있다.
 
-![값 자동화 패널](docs/screenshots/04-automation.png)
+![값 자동화 패널](docs/screenshots/05-automation.png)
 
 ### 트래픽 로그 — raw hex + 해석 요약
 
 RX/TX 쌍, 거절 사유, 타임스탬프가 함께 남는다. 오류 행만 필터할 수 있다.
 
 > 아래 화면은 **테스트 하네스의 합성 코덱**으로 실제 왕복을 발생시켜 찍은 것이다.
-> 표시된 hex 는 그 합성 포맷이며 **XGT 프레임이 아니다**(XGT 코덱은 ⛔ 미구현).
-> 로그 렌더링·해석 요약·오류 표시가 어떻게 보이는지를 나타낸다.
+> 표시된 hex 는 그 합성 포맷이며 **XGT 프레임이 아니다** — 로그 렌더링·해석 요약·오류 표시가
+> 어떻게 보이는지를 나타낸다. 실제 XGT 세션에서는 `4C 53 49 53 2D 58 47 54`(LSIS-XGT)로 시작하는
+> 프레임이 표시된다.
 
-![트래픽 로그](docs/screenshots/05-traffic-log.png)
+![트래픽 로그](docs/screenshots/06-traffic-log.png)
 
 ### 랙 구성 — 슬롯별 장착 모듈과 할당 주소
 
-![랙 구성](docs/screenshots/06-rack-config.png)
+![랙 구성](docs/screenshots/07-rack-config.png)
 
 ---
 
@@ -192,9 +192,19 @@ RX/TX 쌍, 거절 사유, 타임스탬프가 함께 남는다. 오류 행만 필
   "automationRules": [
     { "address": "%IW80", "kind": "Sine", "min": 0, "max": 4000,
       "period": 60, "periodMs": 100 }
+  ],
+  "watches": [
+    { "address": "%MW320", "label": "설정 압력", "format": "Decimal" },
+    { "address": "%MD422", "label": "적산 유량", "format": "Hex" },
+    { "address": "%MX801", "label": "운전 지령", "format": "Bool" }
   ]
 }
 ```
+
+### 주소 워치 (`watches`)
+
+LabVIEW 가 교신하는 임의 주소를 지정한다. `format` 은 `Decimal` / `Signed` / `Hex` / `Binary` / `Bool`.
+UI 의 "주소 워치" 탭에서 추가·제거해도 되고, 이 절을 직접 편집해도 된다.
 
 ### 자동화 제너레이터
 
@@ -220,7 +230,7 @@ RX/TX 쌍, 거절 사유, 타임스탬프가 함께 남는다. 오류 행만 필
 
 ```bash
 dotnet build                      # 경고 0 / 에러 0 이어야 한다
-dotnet test                       # 전체 239개
+dotnet test                       # 전체 325개
 dotnet run --project tools/Nxs.DocShots -- docs/screenshots   # README 스크린샷 재생성
 ```
 
@@ -229,12 +239,13 @@ dotnet run --project tools/Nxs.DocShots -- docs/screenshots   # README 스크린
 ```
 src/Nxs.Core/          UI 의존성 0
   Memory/              메모리맵 + IEC 주소 파서
-  Protocol/            프레이밍 상태머신 · 요청 실행기 · 코덱 인터페이스(구현체 ⛔)
+  Protocol/            프레이밍 상태머신 · 요청 실행기 · 코덱 인터페이스
+  Protocol/Xgt/        XGT FEnet 코덱 (⚠️ 미검증 초안)
   Server/              멀티클라이언트 TCP 서버 (프로토콜 무지)
   Configuration/       I/O 구성 · 모듈 카탈로그 · .nxp
   Automation/          제너레이터 · 룰 엔진
   Diagnostics/         트래픽 로그
-  Fixtures/            캡처 재생 하네스
+  Fixtures/            캡처 재생 하네스 · 프레임 자동 캡처
   Time/                ITimeSource
 src/Nxs.App/           Avalonia UI
 tools/Nxs.DocShots/    README 스크린샷 생성기 (헤드리스 Skia)
@@ -265,12 +276,13 @@ fixtures/labview-capture/   캡처 픽스처 (있으면 회귀 자동 편입)
 | PLC 메모리맵 (%I/%Q/%M · X/B/W/D · 리틀엔디안 · 스레드 안전) | ✅ |
 | IEC 주소 파서 (`%MW100`, `%MX801`, `%IX0.2.5` 슬롯 형식) | ✅ |
 | I/O 구성 모델 → 메모리 자동 매핑 | ✅ |
-| TCP 서버 (멀티클라이언트 · 부분 수신 불변 · 연결 격리) | ✅ 코덱만 주입하면 동작 |
+| TCP 서버 (멀티클라이언트 · 부분 수신 불변 · 연결 격리) | ✅ |
 | 요청 실행기 (개별/연속 읽기·쓰기 + 정확한 거절) | ✅ |
 | I/O 패널 UI (입력 토글 · 출력 LED · AD 채널) | ✅ |
 | 값 자동화 (고정/증가/램프/사인/랜덤/토글) | ✅ |
 | 트래픽 로그 (RX/TX hex + 해석 + 오류 필터 + 파일 저장) | ✅ |
 | 프로젝트 파일 (.nxp JSON) | ✅ |
-| **FEnet 프레임 코덱** | ⛔ spec 근거 부재 |
+| 주소 워치 (임의 주소 지정·형식 선택) | ✅ |
+| **XGT FEnet 코덱 (TCP 2004)** | ⚠️ **동작하지만 미검증 초안** |
+| 프레임 자동 캡처 (검증 근거 수집) | ✅ |
 | **Cnet 서버 (P1)** | ⛔ spec 근거 부재 |
-| **캡처 회귀 스위트** | ⚠️ 비활성 (캡처 부재 + 위 코덱 부재) |

@@ -334,3 +334,44 @@ Tests 239/239 (Core 145 + Integration 47 + App 47) · 빌드 경고0/에러0
 [미정] CONTEXT.md·README_KIT.md 는 사내 맥락(부서명·내부 작업 절차)을 담고 있으나 사용자 지시대로 공개했다.
   스크럽이 필요하면 히스토리 재작성이 필요하다(현재 커밋 1개라 비용은 낮다).
 Next: — (사용자 요청 완료)
+
+## M10 — XGT FEnet 코덱 초안 + 주소 워치 (사용자 지시) · 2026-07-30
+Status ⚠️ (동작하지만 미검증 초안)
+Files: spec/xgt-fenet-reference.md(초안 작성), src/Nxs.Core/Protocol/Xgt/{XgtFenetOptions,XgtFenetHeader,XgtFenetFraming,XgtFenetCodec}.cs,
+  src/Nxs.Core/Fixtures/FrameRecorder.cs, src/Nxs.Core/Configuration/WatchEntry.cs,
+  src/Nxs.App/ViewModels/WatchRowViewModel.cs, src/Nxs.App/{App.axaml.cs,Views/MainWindow.axaml},
+  tests/Nxs.Core.Tests/Protocol/Xgt/XgtFenetCodecTests.cs, tests/Nxs.Core.Tests/Configuration/WatchEntryTests.cs,
+  tests/Nxs.Integration.Tests/XgtFenetEndToEndTests.cs, tests/Nxs.App.Tests/{WatchListSmokeTests,TabRenderTests}.cs
+Tests 325/325 (Core 198 + Integration 58 + App 69) · 빌드 경고0/에러0
+
+[결정] **CLAUDE.md §3(조작 제로) 을 이번 건에 한해 완화.** 사용자가 4개 선택지 중 "제가 초안 작성 → 검증"을
+  명시적으로 선택했다. 원래 규칙의 근거(추측 프레임은 LabVIEW 버그와 구분 불가)는 여전히 유효하므로
+  **위험을 구조로 줄이는 방식**을 택했다:
+  1. 신뢰도 낮은 헤더 필드(CPU Info·Position)는 **요청 값 에코** → 정답을 몰라도 된다. 맞혀야 하는 값의 수를 줄인다.
+  2. 수신 BCC 는 **기본 미검사** — 계산 범위가 미확정인데 틀린 범위로 검사하면 정상 요청을 전부 거절해
+     "접속 자체가 안 되는" 최악의 증상이 된다. 관용적 기본이 안전하다(ValidateInboundBcc 로 켤 수 있음).
+  3. 에러 코드 표·쓰기 블록 배치·한계값을 XgtFenetOptions 로 노출 → 재컴파일 없이 실장비와 맞춘다.
+  4. 해석 실패는 예외가 아니라 에러 응답 → 연결을 유지해 트래픽 로그로 계속 진단한다.
+[결정] spec 문서에 **항목별 신뢰도 등급(높음/중간/낮음)** 을 붙였다. "미검증"을 뭉뚱그리면 어디를 먼저
+  확인해야 하는지 알 수 없다. 가장 위험한 지점(§5 에러 코드 표)을 명시적으로 경고했다.
+[결정] XgtFenetCodec.IsDraft = true 상수로 미검증 상태를 코드에 박고, UI 가 이를 읽어 경고 배너를 띄운다.
+  검증 완료 시 false 로 바꾸면 경고가 사라진다 — 상태와 표시가 어긋날 수 없다.
+[결정] **FrameRecorder — 수신 프레임 자동 캡처.** 사용자가 "랩뷰는 이미 정상 동작 중"이라고 확인해 주었으므로
+  LabVIEW 프레임이 곧 정답이다. 그 프레임을 얻으려면 원래 nc 캡처 절차가 필요했는데,
+  시뮬레이터가 접속 시 알아서 fixtures/labview-capture/ 에 저장하게 하여 **검증 루프가 스스로 닫히게** 했다.
+  같은 모양은 1회만 저장(폴링으로 수천 건 쌓이는 것 방지), 응답은 .actual 로 저장(.expected 는 사람 확정본 전용).
+[버그 수정·문서] 초안 §7 예제 프레임의 Length 값(12)이 산술 오류였다 — 바이트 나열은 요청 16 / 응답 14 였다.
+  프레임 벡터를 테스트로 먼저 쓴 덕에 바로 잡혔다. 구현이 옳고 문서가 틀렸던 경우.
+[버그 수정·UI] 워치 탭의 `$parent[ItemsControl].((vm:MainWindowViewModel)DataContext)` 조상 캐스팅 바인딩이
+  런타임 타입 해석에 실패해 **탭을 열면 앱이 죽었다.** 행이 자기 RemoveCommand 를 갖도록 바꿔 해결.
+  → 이 부류를 놓친 원인: TabControl 내용이 지연 생성되므로 뷰모델만 조작하는 테스트는 선택되지 않은 탭의
+  DataTemplate 을 실체화하지 않는다. **TabRenderTests 를 추가해 전 탭을 실제로 렌더**하게 했다.
+  발견은 스크린샷 도구가 했다 — 문서 생성이 테스트 역할을 겸한 사례.
+[결정] 주소 워치(PRD 범위 확장, 사용자 요청): 임의 IEC 주소를 사용자가 추가·제거하고 값을 직접 읽고 쓴다.
+  LabVIEW 는 대부분 %M 영역과 교신하는데 그 주소는 I/O 랙 매핑에 나타나지 않아 기존 UI 로는 볼 수 없었다.
+  표시 형식 5종(10진/부호/16진/2진/ON·OFF), 입력도 10진·0x16진·음수·ON/OFF 를 받는다. .nxp 에 저장.
+  AD 채널과 같은 "외부 변경만 반영" 규칙을 써서 주기 갱신이 입력 중 텍스트를 되돌리지 않게 했다.
+[미검증] **Length 필드 의미·CPU Info 값·BCC 범위·에러 코드 표·2블록 이상 쓰기 배치** 는 여전히 미확인.
+  LabVIEW 를 한 번 붙이면 자동 캡처로 1~3번이 즉시 확정된다. 에러 코드 표는 매뉴얼 필요.
+[미검증] Windows 실제 기동 여전히 미확인(빌드 호스트 macOS).
+Next: LabVIEW 접속 → 자동 캡처로 spec 검증 → IsDraft=false
