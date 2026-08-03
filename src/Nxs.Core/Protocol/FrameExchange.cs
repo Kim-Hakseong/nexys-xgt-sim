@@ -17,6 +17,14 @@ public sealed record FrameExchange
     /// <summary>거절 사유. 성공이면 <see cref="PlcErrorReason.None"/>.</summary>
     public PlcErrorReason Reason { get; init; } = PlcErrorReason.None;
 
+    /// <summary>
+    /// 이 교환이 건드린 주소 표기. 트래픽 로그의 주소 필터가 사용한다.
+    /// </summary>
+    /// <remarks>
+    /// 요약 문자열을 문자열 검색하는 방식은 취약하다 — 코덱이 파싱한 주소를 그대로 넘긴다.
+    /// </remarks>
+    public IReadOnlyList<string> Addresses { get; init; } = [];
+
     /// <summary>응답을 보내지 않는 처리 결과인지.</summary>
     public bool IsSilent => ResponseFrame.Length == 0;
 }

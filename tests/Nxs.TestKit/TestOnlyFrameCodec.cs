@@ -61,6 +61,18 @@ public sealed class TestOnlyFrameCodec : IFrameCodec
     /// <inheritdoc />
     public int MaxFrameLength => 8192;
 
+    /// <summary>
+    /// 요청이 건드린 주소 표기 — 트래픽 로그의 주소 필터가 이 목록으로 걸러낸다.
+    /// </summary>
+    private static IReadOnlyList<string> AddressesOf(PlcRequest request) => request switch
+    {
+        ReadIndividualRequest r => r.Addresses.Select(a => a.ToString()).ToArray(),
+        WriteIndividualRequest w => w.Items.Select(i => i.Address.ToString()).ToArray(),
+        ReadContinuousRequest r => [r.Start.ToString()],
+        WriteContinuousRequest w => [w.Start.ToString()],
+        _ => [],
+    };
+
     /// <inheritdoc />
     public FrameExchange Handle(ReadOnlySpan<byte> requestFrame)
     {
@@ -83,6 +95,7 @@ public sealed class TestOnlyFrameCodec : IFrameCodec
                     ? $"OK · 블록 {response.Blocks.Count}개"
                     : $"거절 · {response.Reason}",
                 Reason = response.Reason,
+                Addresses = AddressesOf(request),
             };
         }
         catch (FormatException ex)

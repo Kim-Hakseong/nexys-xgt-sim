@@ -346,26 +346,67 @@
       <!-- 트래픽 로그 -->
       <TabItem Header="트래픽 로그">
         <Grid RowDefinitions="Auto,*">
-          <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,12">
-            <CheckBox Content="오류만" IsChecked="{Binding ShowErrorsOnly}" VerticalAlignment="Center" />
-            <CheckBox Content="일시정지" IsChecked="{Binding IsTrafficPaused}" VerticalAlignment="Center" />
-            <Button Content="비우기" Command="{Binding ClearTrafficCommand}" />
-            <Border Classes="pill" VerticalAlignment="Center">
-              <TextBlock Text="{Binding TrafficSummary}" FontSize="12" />
-            </Border>
+          <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Text="방향" VerticalAlignment="Center" Classes="muted" />
+              <ComboBox Name="TrafficDirectionBox" Width="196"
+                        ItemsSource="{Binding DirectionOptions}"
+                        SelectedItem="{Binding SelectedDirectionOption}"
+                        DisplayMemberBinding="{Binding Label}"
+                        ToolTip.Tip="RX = 마스터 → 시뮬 요청, TX = 시뮬 → 마스터 응답" />
+              <CheckBox Content="오류만" IsChecked="{Binding ShowErrorsOnly}" VerticalAlignment="Center" />
+              <CheckBox Content="일시정지" IsChecked="{Binding IsTrafficPaused}" VerticalAlignment="Center" />
+              <Button Content="비우기" Command="{Binding ClearTrafficCommand}" />
+              <Border Classes="pill" VerticalAlignment="Center">
+                <TextBlock Text="{Binding TrafficSummary}" FontSize="12" />
+              </Border>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="주소 필터" VerticalAlignment="Center" Classes="muted" />
+              <TextBox Name="NewTrafficAddressBox" Width="140" Classes="mono"
+                       Text="{Binding NewTrafficAddress}" Watermark="%MW320"
+                       ToolTip.Tip="비워 두면 전체 주소를 봅니다" />
+              <Button Name="AddTrafficAddressButton" Content="주소 추가"
+                      Command="{Binding AddTrafficAddressCommand}" />
+              <Button Content="필터 지우기" Command="{Binding ClearTrafficAddressesCommand}"
+                      IsEnabled="{Binding HasTrafficAddressFilter}" />
+              <ItemsControl ItemsSource="{Binding TrafficAddresses}" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Classes="pill" Margin="0,0,6,0">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding}" FontFamily="Consolas,Menlo,monospace"
+                                   FontSize="12" VerticalAlignment="Center" />
+                        <Button Content="✕" FontSize="10" Padding="4,0" MinWidth="0"
+                                Command="{Binding $parent[ItemsControl].DataContext.RemoveTrafficAddressCommand}"
+                                CommandParameter="{Binding}" ToolTip.Tip="이 주소 필터 제거" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
           </StackPanel>
 
           <Border Grid.Row="1" Classes="card" Padding="8">
             <DataGrid ItemsSource="{Binding TrafficRows}" IsReadOnly="True"
                       CanUserResizeColumns="True" HeadersVisibility="Column">
               <DataGrid.Columns>
-                <DataGridTextColumn Header="시각" Binding="{Binding TimeText}" Width="118"
+                <DataGridTextColumn Header="시각" Binding="{Binding TimeText}" Width="134"
                                     FontFamily="Menlo,Consolas,monospace" />
                 <DataGridTextColumn Header="방향" Binding="{Binding DirectionText}" Width="74"
                                     FontFamily="Menlo,Consolas,monospace" />
-                <DataGridTextColumn Header="연결" Binding="{Binding ClientText}" Width="160"
+                <DataGridTextColumn Header="연결" Binding="{Binding ClientText}" Width="146"
                                     FontFamily="Menlo,Consolas,monospace" />
                 <DataGridTextColumn Header="사유" Binding="{Binding ReasonText}" Width="152" />
+                <DataGridTextColumn Header="주소" Binding="{Binding AddressText}" Width="150"
+                                    FontFamily="Consolas,Menlo,monospace" />
                 <DataGridTextColumn Header="해석" Binding="{Binding SummaryText}" Width="2*" />
                 <DataGridTextColumn Header="raw hex" Binding="{Binding HexText}" Width="3*"
                                     FontFamily="Menlo,Consolas,monospace" />

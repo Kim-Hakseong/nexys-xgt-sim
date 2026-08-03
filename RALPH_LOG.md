@@ -532,3 +532,40 @@ Tests 474/474 (Core 280 + Integration 61 + App 133) · 빌드 경고0/에러0
 [확인] RestartAfterStopBindsAgain 이 전체 실행에서 1회 실패했으나 단독 2회 통과 — 포트 재사용 플레이키이며
   이번 변경과 무관하다(서버 코드 미수정). 기록만 남긴다.
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)
+
+## M16 — 연속 쓰기 길이 판별 + 트래픽 로그 주소·방향 필터 (사용자 지시) · 2026-08-03
+Status ✅
+Files: src/Nxs.Core/Protocol/Xgt/XgtFenetCodec.cs, src/Nxs.Core/Protocol/FrameExchange.cs,
+  src/Nxs.Core/Diagnostics/{TrafficEvent,TrafficFilter,TrafficLog}.cs,
+  src/Nxs.Core/Server/PlcTcpServer.cs,
+  src/Nxs.App/ViewModels/{MainWindowViewModel,TrafficRowViewModel}.cs,
+  src/Nxs.App/Views/MainWindow.axaml, tests/Nxs.TestKit/TestOnlyFrameCodec.cs,
+  tools/Nxs.DocShots/Program.cs, README.md, spec/xgt-fenet-reference.md,
+  tests/Nxs.Core.Tests/{Protocol/Xgt/XgtFenetCodecTests,Diagnostics/TrafficFilterTests}.cs,
+  tests/Nxs.App.Tests/TrafficFilterUiTests.cs
+Tests 507/507 (Core 300 + Integration 61 + App 146) · 빌드 경고0/에러0
+
+[증상] "시뮬 → 랩뷰는 되는데 반대(랩뷰 → 시뮬 쓰기)가 안 된다."
+[추론] 읽기가 되므로 헤더 20바이트와 데이터부 앞 8바이트 해석은 맞다. 남은 미처리 후보는
+  **연속 쓰기(데이터 타입 0x0014)** 뿐이었다 — 개별 쓰기는 M14 에서 길이 판별로 고쳤지만
+  연속 쓰기는 여전히 2바이트를 무검증으로 개수로 읽고 그 길이만큼 잘라내고 있었다.
+  마스터가 개수 필드를 붙이지 않으면 데이터 첫 2바이트를 길이로 오독해 Slice 가 범위를 벗어난다.
+[결정] **연속 쓰기도 프레임 길이로 개수 필드 유무를 판별한다.** 남은 바이트 수를 알고 있으므로
+  선행 2바이트가 `남은 바이트 - 2` 와 정확히 같을 때만 개수 필드로 인정하고, 아니면 남은 전체를
+  데이터로 본다. 데이터가 0바이트면 무엇이 비었는지 밝히며 거절한다.
+  연속 **읽기**에도 같은 종류의 경계 검사(남은 바이트 < 2)를 넣었다 — 짧은 프레임에 예외를 던지지 않는다.
+[결정] **주소를 요약 문자열에서 파싱하지 않는다.** 트래픽 필터를 만들며 요약 문자열을 검색하는 방식이
+  가장 손쉬웠지만, 요약 문구를 고치면 필터가 조용히 깨진다. FrameExchange·TrafficEvent 에
+  `Addresses` 를 실어 코덱이 이미 파싱한 주소를 그대로 넘긴다.
+[결정] **방향 필터는 3택 열거형(RxAndTx / RxOnly / TxOnly)** 으로 두고 체크박스 2개로 나누지 않았다.
+  둘 다 끈 상태(아무것도 안 보임)라는 무의미한 조합이 존재할 수 없게 만든다.
+  연결 수립/해제 같은 방향 없는 Note 행은 `RX + TX 함께` 에서만 보이고 주소 필터가 걸리면 숨는다 —
+  주소를 추적하는 중에 주소 없는 행이 섞이면 필터가 안 듣는 것처럼 보인다.
+[결정] 주소 필터 입력도 M14 의 AddressInput 정규화를 거친다. 전각 `％ｍｗ３２０` 도 받고,
+  중복은 조용히 무시하지 않고 이미 있다고 알린다.
+[결정] 합성 코덱(TestOnlyFrameCodec)도 Addresses 를 채웠다. 스크린샷에서 주소 열이 비어 있으면
+  기능이 없는 것처럼 보이는데, 그건 코덱이 안 채워서였다 — 서버 계층 회귀 테스트도 같은 이득을 본다.
+[버그 수정] 트래픽 표의 "시각" 열 폭이 좁아 밀리초가 잘렸다(118→134). 스크린샷 검토로 발견.
+[미확인] 연속 쓰기 수정이 실제 랩뷰 쓰기 실패를 해소했는지는 현장 확인이 필요하다.
+  재현되면 자동 캡처된 `fixtures/labview-capture/req_*.txt` hex 가 답을 준다.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요) · 랩뷰 쓰기 현장 재확인

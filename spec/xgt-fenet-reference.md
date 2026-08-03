@@ -132,9 +132,14 @@ uint16 LE  Command = 0x0058, DataType, Reserved = 0x0000, BlockCount
 uint16 LE  Command = 0x0058, DataType = 0x0014, Reserved = 0x0000, BlockCount = 0x0001
 uint16 LE  VarNameLength
 ASCII      VarName
-uint16 LE  DataCount
+uint16 LE  DataCount   ← 없는 마스터도 있다. 아래 참조
 bytes      Data
 ```
+> **`DataCount` 유무는 추측하지 않는다 — 프레임 길이로 판별한다(해소, 2026-08-03).**
+> 헤더 Length 가 데이터부 크기를 정확히 주므로 변수명 뒤 남은 바이트 수를 알 수 있다.
+> 선행 2바이트가 `남은 바이트 − 2` 와 정확히 같을 때만 `DataCount` 로 인정하고,
+> 아니면 남은 전체를 `Data` 로 본다. 무검증으로 2바이트를 개수로 읽으면 개수 필드가 없는
+> 마스터의 데이터 첫 2바이트를 길이로 오독해(예: `0xFFFF` → 65535바이트) 쓰기가 통째로 실패한다.
 
 ### 쓰기 응답 (`0x0059`)
 신뢰도: **중간**

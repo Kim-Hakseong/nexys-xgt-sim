@@ -234,7 +234,8 @@ public sealed class PlcTcpServer : IAsyncDisposable
                 {
                     var exchange = _codec.Handle(frame);
 
-                    Record(TrafficDirection.Rx, id, frame, exchange.RequestSummary, exchange.Reason);
+                    Record(TrafficDirection.Rx, id, frame, exchange.RequestSummary, exchange.Reason,
+                        exchange.Addresses);
 
                     if (_recorder is not null
                         && _recorder.Record(frame, exchange.ResponseFrame, exchange.RequestSummary))
@@ -248,7 +249,8 @@ public sealed class PlcTcpServer : IAsyncDisposable
                     }
 
                     await stream.WriteAsync(exchange.ResponseFrame, cancellationToken).ConfigureAwait(false);
-                    Record(TrafficDirection.Tx, id, exchange.ResponseFrame, exchange.ResponseSummary, exchange.Reason);
+                    Record(TrafficDirection.Tx, id, exchange.ResponseFrame, exchange.ResponseSummary,
+                        exchange.Reason, exchange.Addresses);
                 }
             }
         }
@@ -302,7 +304,8 @@ public sealed class PlcTcpServer : IAsyncDisposable
     }
 
     private void Record(
-        TrafficDirection direction, string clientId, byte[] raw, string summary, PlcErrorReason reason)
+        TrafficDirection direction, string clientId, byte[] raw, string summary, PlcErrorReason reason,
+        IReadOnlyList<string>? addresses = null)
         => _traffic?.Record(new TrafficEvent
         {
             Timestamp = _time.UtcNow,
@@ -311,6 +314,7 @@ public sealed class PlcTcpServer : IAsyncDisposable
             Raw = raw,
             Summary = summary,
             Reason = reason,
+            Addresses = addresses ?? [],
         });
 
     private void Note(string summary, string clientId = "-", PlcErrorReason reason = PlcErrorReason.None)

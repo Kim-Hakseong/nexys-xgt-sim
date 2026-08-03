@@ -136,11 +136,17 @@ public sealed class XgtFenetCodec : IFrameCodec
         if (dataType == TypeContinuous)
         {
             var address = ReadName(data, ref cursor, out var text);
+            if (data.Length - cursor < 2)
+            {
+                return Reject(header, CmdReadResponse, dataType, PlcErrorReason.InvalidDataSize,
+                    $"연속 읽기 {text} 에 바이트 수 필드가 없습니다");
+            }
+
             var byteCount = BinaryPrimitives.ReadUInt16LittleEndian(data[cursor..]);
 
             var response = _executor.Execute(new ReadContinuousRequest(address, byteCount));
             return BuildReadResponse(header, dataType, response,
-                $"연속 읽기 {text} {byteCount}바이트");
+                $"연속 읽기 {text} {byteCount}바이트", [text]);
         }
 
         if (!IsScalarType(dataType))
@@ -159,7 +165,7 @@ public sealed class XgtFenetCodec : IFrameCodec
 
         var result = _executor.Execute(new ReadIndividualRequest(addresses));
         return BuildReadResponse(header, dataType, result,
-            $"개별 읽기 {blockCount}블록: {string.Join(", ", names)}");
+            $"개별 읽기 {blockCount}블록: {string.Join(", ", names)}", names);
     }
 
     private FrameExchange HandleWrite(XgtFenetHeader header, ushort dataType, ReadOnlySpan<byte> data)
@@ -170,13 +176,34 @@ public sealed class XgtFenetCodec : IFrameCodec
         if (dataType == TypeContinuous)
         {
             var address = ReadName(data, ref cursor, out var text);
-            var count = BinaryPrimitives.ReadUInt16LittleEndian(data[cursor..]);
-            cursor += 2;
-            var payload = data.Slice(cursor, count).ToArray();
+
+            // 카운트 필드가 있는지 길이로 판별한다 — 개별 쓰기와 같은 원리.
+            //   있음: 남은 = 2 + 선언값  → 선언값이 남은-2 와 일치한다
+            //   없음: 남은 = 데이터 전부
+            // 무검증으로 앞 2바이트를 카운트로 읽으면 값이 0xFFFF 일 때 65535바이트를 읽으려 해 실패한다.
+            var remaining = data.Length - cursor;
+            byte[] payload;
+
+            if (remaining >= 2
+                && BinaryPrimitives.ReadUInt16LittleEndian(data[cursor..]) == remaining - 2)
+            {
+                var declared = BinaryPrimitives.ReadUInt16LittleEndian(data[cursor..]);
+                cursor += 2;
+                payload = data.Slice(cursor, declared).ToArray();
+            }
+            else if (remaining > 0)
+            {
+                payload = data.Slice(cursor, remaining).ToArray();
+            }
+            else
+            {
+                return Reject(header, CmdWriteResponse, dataType, PlcErrorReason.InvalidDataSize,
+                    $"연속 쓰기 {text} 에 데이터가 없습니다");
+            }
 
             var response = _executor.Execute(new WriteContinuousRequest(address, payload));
             return BuildWriteResponse(header, dataType, response,
-                $"연속 쓰기 {text} {count}바이트 = {Hex.Format(payload)}");
+                $"연속 쓰기 {text} {payload.Length}바이트 = {Hex.Format(payload)}", [text]);
         }
 
         if (!IsScalarType(dataType))
@@ -237,7 +264,8 @@ public sealed class XgtFenetCodec : IFrameCodec
 
         var result = _executor.Execute(new WriteIndividualRequest(items));
         return BuildWriteResponse(header, dataType, result,
-            $"개별 쓰기 {blockCount}블록: {string.Join(", ", summaries)}");
+            $"개별 쓰기 {blockCount}블록: {string.Join(", ", summaries)}",
+            items.Select(i => i.Address.Text).ToArray());
     }
 
     private IecAddress ReadName(ReadOnlySpan<byte> data, ref int cursor, out string text)
@@ -318,7 +346,8 @@ public sealed class XgtFenetCodec : IFrameCodec
         => dataType is TypeBit or TypeByte or TypeWord or TypeDWord or TypeLWord;
 
     private FrameExchange BuildReadResponse(
-        XgtFenetHeader header, ushort dataType, PlcResponse response, string requestSummary)
+        XgtFenetHeader header, ushort dataType, PlcResponse response, string requestSummary,
+        IReadOnlyList<string>? addresses = null)
     {
         var blocks = response.IsSuccess ? response.Blocks : [];
         var payloadSize = blocks.Sum(b => 2 + b.Length);
@@ -340,11 +369,13 @@ public sealed class XgtFenetCodec : IFrameCodec
         }
 
         return Compose(header, data, requestSummary, response.Reason,
-            response.IsSuccess ? $"읽기 응답 · 블록 {blocks.Count}개" : $"거절 · {response.Reason}");
+            response.IsSuccess ? $"읽기 응답 · 블록 {blocks.Count}개" : $"거절 · {response.Reason}",
+            addresses);
     }
 
     private FrameExchange BuildWriteResponse(
-        XgtFenetHeader header, ushort dataType, PlcResponse response, string requestSummary)
+        XgtFenetHeader header, ushort dataType, PlcResponse response, string requestSummary,
+        IReadOnlyList<string>? addresses = null)
     {
         var data = new byte[10];
         BinaryPrimitives.WriteUInt16LittleEndian(data, CmdWriteResponse);
@@ -354,7 +385,7 @@ public sealed class XgtFenetCodec : IFrameCodec
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(8), 0x0000);
 
         return Compose(header, data, requestSummary, response.Reason,
-            response.IsSuccess ? "쓰기 응답 · 정상" : $"거절 · {response.Reason}");
+            response.IsSuccess ? "쓰기 응답 · 정상" : $"거절 · {response.Reason}", addresses);
     }
 
     private FrameExchange Reject(
@@ -376,7 +407,7 @@ public sealed class XgtFenetCodec : IFrameCodec
 
     private static FrameExchange Compose(
         XgtFenetHeader header, byte[] data, string requestSummary,
-        PlcErrorReason reason, string responseSummary)
+        PlcErrorReason reason, string responseSummary, IReadOnlyList<string>? addresses = null)
     {
         var frame = new byte[XgtFenetHeader.Length + data.Length];
         header.WriteResponse(frame, (ushort)data.Length);
@@ -388,6 +419,7 @@ public sealed class XgtFenetCodec : IFrameCodec
             RequestSummary = requestSummary,
             ResponseSummary = responseSummary,
             Reason = reason,
+            Addresses = addresses ?? [],
         };
     }
 

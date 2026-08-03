@@ -38,6 +38,33 @@ public sealed record TrafficEvent
     /// <summary>거절 사유. 정상이면 <see cref="PlcErrorReason.None"/>.</summary>
     public PlcErrorReason Reason { get; init; } = PlcErrorReason.None;
 
+    /// <summary>이 사건이 건드린 주소 표기. 주소 필터가 사용한다.</summary>
+    public IReadOnlyList<string> Addresses { get; init; } = [];
+
+    /// <summary>
+    /// 지정 주소 중 하나라도 건드렸는지. 필터가 비어 있으면 항상 참.
+    /// </summary>
+    public bool TouchesAny(IReadOnlyCollection<string> addresses)
+    {
+        if (addresses.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (var address in Addresses)
+        {
+            foreach (var wanted in addresses)
+            {
+                if (string.Equals(address, wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>오류 행인지 (로그 필터·ErrorBrush 표시용).</summary>
     public bool IsError => Reason != PlcErrorReason.None;
 

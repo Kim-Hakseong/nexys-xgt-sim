@@ -514,6 +514,110 @@ public class XgtFenetCodecTests
         Assert.Contains("맞지 않습니다", exchange.RequestSummary, StringComparison.Ordinal);
     }
 
+    /// <summary>카운트 필드 **없이** 데이터만 담는 연속 쓰기(배치 B).</summary>
+    private static byte[] ContinuousWriteWithoutCount(string name, byte[] data)
+    {
+        var body = new List<byte>();
+        body.AddRange(U16(0x0058));
+        body.AddRange(U16(0x0014));
+        body.AddRange(U16(0x0000));
+        body.AddRange(U16(0x0001));
+        var ascii = Encoding.ASCII.GetBytes(name);
+        body.AddRange(U16((ushort)ascii.Length));
+        body.AddRange(ascii);
+        body.AddRange(data);   // DataCount 없음
+        return body.ToArray();
+    }
+
+    // ==================== 연속 쓰기 카운트 필드 자동 판별 ====================
+
+    [Fact]
+    public void ContinuousWriteWithCountFieldIsAccepted()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(ContinuousWriteData("%MW0", [0xAA, 0xBB, 0xCC, 0xDD])));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(0xBBAAu, memory.ReadScalar(IecAddress.Parse("%MW0")));
+        Assert.Equal(0xDDCCu, memory.ReadScalar(IecAddress.Parse("%MW1")));
+    }
+
+    [Fact]
+    public void ContinuousWriteWithoutCountFieldIsAlsoAccepted()
+    {
+        // 카운트 필드가 없으면 이전 구현은 데이터 앞 2바이트를 길이로 오독해 실패했다.
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(ContinuousWriteWithoutCount("%MW0", [0xAA, 0xBB, 0xCC, 0xDD])));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(0xBBAAu, memory.ReadScalar(IecAddress.Parse("%MW0")));
+        Assert.Equal(0xDDCCu, memory.ReadScalar(IecAddress.Parse("%MW1")));
+    }
+
+    [Fact]
+    public void ContinuousWriteWithoutCountWorksWhenDataLooksLikeAHugeLength()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(ContinuousWriteWithoutCount("%MW2", [0xFF, 0xFF])));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(0xFFFFu, memory.ReadScalar(IecAddress.Parse("%MW2")));
+    }
+
+    [Theory]
+    [InlineData("%MW0")]
+    [InlineData("%MX0")]
+    [InlineData("%QW0")]
+    [InlineData("%MB0")]
+    public void ContinuousWriteWorksAtLowAddressesInEveryArea(string address)
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(ContinuousWriteWithoutCount(address, [0x5A, 0xA5])));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        var parsed = IecAddress.Parse(address);
+        Assert.Equal("5A A5", Hex.Format(memory.ReadBytes(parsed.Area, parsed.ByteStart, 2)));
+    }
+
+    [Fact]
+    public void ContinuousWriteWithNoDataIsRejected()
+    {
+        var (codec, _) = NewCodec();
+        var body = new List<byte>();
+        body.AddRange(U16(0x0058));
+        body.AddRange(U16(0x0014));
+        body.AddRange(U16(0x0000));
+        body.AddRange(U16(0x0001));
+        var ascii = Encoding.ASCII.GetBytes("%MW0");
+        body.AddRange(U16((ushort)ascii.Length));
+        body.AddRange(ascii);
+
+        var exchange = codec.Handle(Frame(body.ToArray()));
+
+        Assert.NotEqual(PlcErrorReason.None, exchange.Reason);
+    }
+
+    // ==================== 주소 추적 (트래픽 로그 필터용) ====================
+
+    [Fact]
+    public void ExchangeReportsTheAddressesItTouched()
+    {
+        var (codec, _) = NewCodec();
+
+        var read = codec.Handle(Frame(ReadIndividualData(0x0002, "%MW10", "%MW11")));
+        Assert.Equal(new[] { "%MW10", "%MW11" }, read.Addresses);
+
+        var write = codec.Handle(Frame(WriteIndividualData(0x0002, ("%MW20", [0x01, 0x00]))));
+        Assert.Equal(new[] { "%MW20" }, write.Addresses);
+
+        var continuous = codec.Handle(Frame(ContinuousReadData("%MW0", 4)));
+        Assert.Equal(new[] { "%MW0" }, continuous.Addresses);
+    }
+
     // ==================== 오류 ====================
 
     [Fact]

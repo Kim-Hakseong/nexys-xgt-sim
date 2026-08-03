@@ -110,6 +110,16 @@ public sealed class TrafficLog : ITrafficSink
         }
     }
 
+    /// <summary>필터를 적용한 스냅샷을 만든다.</summary>
+    public IReadOnlyList<TrafficEvent> Snapshot(TrafficFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        lock (_gate)
+        {
+            return _events.Where(filter.Accepts).ToArray();
+        }
+    }
+
     /// <summary>로그를 비운다.</summary>
     public void Clear()
     {
@@ -137,11 +147,30 @@ public sealed class TrafficLog : ITrafficSink
         File.WriteAllText(path, Format(errorsOnly), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
 
+    /// <summary>필터를 적용해 파일로 저장한다.</summary>
+    public void Save(string path, TrafficFilter filter)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(
+            path, Format(Snapshot(filter), filter.ErrorsOnly),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
     /// <summary>로그를 텍스트로 만든다.</summary>
     /// <param name="errorsOnly">참이면 오류 행만.</param>
     public string Format(bool errorsOnly = false)
+        => Format(Snapshot(errorsOnly), errorsOnly);
+
+    private string Format(IReadOnlyList<TrafficEvent> events, bool errorsOnly)
     {
-        var events = Snapshot(errorsOnly);
         var dropped = DroppedCount;
 
         var sb = new StringBuilder();
@@ -159,7 +188,7 @@ public sealed class TrafficLog : ITrafficSink
               .AppendLine(dropped.ToString(CultureInfo.InvariantCulture));
         }
 
-        sb.AppendLine("# 시각(UTC)\t방향\t연결\t사유\t요약\traw hex");
+        sb.AppendLine("# 시각(UTC)\t방향\t연결\t사유\t주소\t요약\traw hex");
 
         foreach (var e in events)
         {
@@ -170,6 +199,8 @@ public sealed class TrafficLog : ITrafficSink
               .Append(e.ClientId)
               .Append('\t')
               .Append(e.IsError ? e.Reason.ToString() : "-")
+              .Append('\t')
+              .Append(e.Addresses.Count > 0 ? string.Join(",", e.Addresses) : "-")
               .Append('\t')
               .Append(e.Summary)
               .Append('\t')

@@ -43,4 +43,9 @@ public sealed class TrafficRowViewModel
 
     /// <summary>거절 사유 표기. 정상이면 빈 문자열.</summary>
     public string ReasonText => Source.IsError ? Source.Reason.ToString() : string.Empty;
+
+    /// <summary>이 프레임이 건드린 주소 표기. 없으면 빈 문자열.</summary>
+    public string AddressText => Source.Addresses.Count > 0
+        ? string.Join(" ", Source.Addresses)
+        : string.Empty;
 }

@@ -27,6 +27,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private bool _isTrafficPaused;
 
     [ObservableProperty]
+    private DisplayOption<TrafficDirectionFilter> _selectedDirectionOption = null!;
+
+    /// <summary>새 트래픽 주소 필터 입력값.</summary>
+    [ObservableProperty]
+    private string _newTrafficAddress = string.Empty;
+
+    [ObservableProperty]
     private string _bindAddressText = "0.0.0.0";
 
     [ObservableProperty]
@@ -58,6 +65,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _codecFactory = codecFactory;
         _trafficLog = trafficLog ?? new TrafficLog();
         _frameRecorder = frameRecorder;
+        _selectedDirectionOption = DirectionOptions[0];
         LoadProject(project ?? NxpProject.CreateDefault(port: XgtFenetOptions.DefaultPort));
     }
 
@@ -84,6 +92,85 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     /// <summary>트래픽 로그 행.</summary>
     public ObservableCollection<TrafficRowViewModel> TrafficRows { get; } = [];
+
+    /// <summary>트래픽 방향 필터 선택 항목 (RX+TX / RX만 / TX만).</summary>
+    public IReadOnlyList<DisplayOption<TrafficDirectionFilter>> DirectionOptions { get; } =
+        new[]
+        {
+            TrafficDirectionFilter.RxAndTx,
+            TrafficDirectionFilter.RxOnly,
+            TrafficDirectionFilter.TxOnly,
+        }.Select(d => new DisplayOption<TrafficDirectionFilter>(d, d.Label())).ToArray();
+
+    /// <summary>
+    /// 트래픽 로그 주소 필터. 비어 있으면 전 주소를 보여준다.
+    /// </summary>
+    public ObservableCollection<string> TrafficAddresses { get; } = [];
+
+    /// <summary>주소 필터가 걸려 있는지.</summary>
+    public bool HasTrafficAddressFilter => TrafficAddresses.Count > 0;
+
+    /// <summary>현재 트래픽 필터.</summary>
+    public TrafficFilter CurrentTrafficFilter => new()
+    {
+        Direction = SelectedDirectionOption?.Value ?? TrafficDirectionFilter.RxAndTx,
+        Addresses = TrafficAddresses.ToArray(),
+        ErrorsOnly = ShowErrorsOnly,
+    };
+
+    /// <summary>주소 필터를 트래픽 로그에 추가한다.</summary>
+    [RelayCommand]
+    private void AddTrafficAddress()
+    {
+        ErrorMessage = null;
+        var address = AddressInput.Normalize(NewTrafficAddress);
+
+        if (!WatchEntry.IsValid(address))
+        {
+            ErrorMessage = $"주소를 해석할 수 없습니다 — {AddressInput.Describe(NewTrafficAddress)}. " +
+                "형식: %<영역 I/Q/M><크기 X/B/W/D/L><번지> (예: %MW0 · %MD422)";
+            return;
+        }
+
+        if (TrafficAddresses.Any(a => string.Equals(a, address, StringComparison.OrdinalIgnoreCase)))
+        {
+            ErrorMessage = $"'{address}' 는 이미 필터에 있습니다.";
+            return;
+        }
+
+        TrafficAddresses.Add(address);
+        NewTrafficAddress = string.Empty;
+        OnPropertyChanged(nameof(HasTrafficAddressFilter));
+        RefreshTraffic();
+        StatusMessage = $"트래픽 주소 필터 추가: {address}";
+    }
+
+    /// <summary>주소 필터를 제거한다.</summary>
+    [RelayCommand]
+    private void RemoveTrafficAddress(string? address)
+    {
+        if (address is not null && TrafficAddresses.Remove(address))
+        {
+            OnPropertyChanged(nameof(HasTrafficAddressFilter));
+            RefreshTraffic();
+            StatusMessage = $"트래픽 주소 필터 제거: {address}";
+        }
+    }
+
+    /// <summary>주소 필터를 모두 지운다.</summary>
+    [RelayCommand]
+    private void ClearTrafficAddresses()
+    {
+        if (TrafficAddresses.Count == 0)
+        {
+            return;
+        }
+
+        TrafficAddresses.Clear();
+        OnPropertyChanged(nameof(HasTrafficAddressFilter));
+        RefreshTraffic();
+        StatusMessage = "트래픽 주소 필터를 모두 지웠습니다.";
+    }
 
     /// <summary>사용자 지정 워치 목록.</summary>
     public ObservableCollection<WatchRowViewModel> Watches { get; } = [];
@@ -144,7 +231,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         get
         {
             var dropped = _trafficLog.DroppedCount;
-            var text = $"{_trafficLog.Count}건 · 오류 {_trafficLog.ErrorCount}건";
+            var text = $"{TrafficRows.Count} / {_trafficLog.Count}건 · 오류 {_trafficLog.ErrorCount}건";
+            if (HasTrafficAddressFilter)
+            {
+                text += $" · 주소 필터 {TrafficAddresses.Count}개";
+            }
+
             return dropped > 0 ? $"{text} · 용량 초과로 {dropped}건 버림" : text;
         }
     }
@@ -486,6 +578,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    partial void OnSelectedDirectionOptionChanged(DisplayOption<TrafficDirectionFilter> value)
+        => RefreshTraffic();
+
+    partial void OnShowErrorsOnlyChanged(bool value) => RefreshTraffic();
+
     /// <summary>트래픽 로그를 비운다.</summary>
     [RelayCommand]
     private void ClearTraffic()
@@ -502,7 +599,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ErrorMessage = null;
         try
         {
-            _trafficLog.Save(path, ShowErrorsOnly);
+            _trafficLog.Save(path, CurrentTrafficFilter);
             StatusMessage = $"트래픽 로그를 저장했습니다: {Path.GetFileName(path)}";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -587,7 +684,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // 로그는 링 버퍼이므로 전체 스냅샷을 다시 투사한다 — 표시 상한을 두어 UI 부담을 막는다.
         const int displayLimit = 500;
-        var events = _trafficLog.Snapshot(ShowErrorsOnly);
+        var events = _trafficLog.Snapshot(CurrentTrafficFilter);
         var visible = events.Count > displayLimit ? events.Skip(events.Count - displayLimit) : events;
 
         TrafficRows.Clear();
