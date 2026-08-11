@@ -55,6 +55,43 @@ public sealed record AnalogChannelScale
         return EngineeringMin + (ratio * (EngineeringMax - EngineeringMin));
     }
 
+    /// <summary>
+    /// 실수 raw 값을 공학단위로 변환한다. raw 를 Float/Double 형식으로 다루는 채널용이다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ToEngineering(int)"/> 는 정수 raw 를 전제한다. 마스터가 워드에 IEEE754 실수를
+    /// 넣는 경우 raw 자체가 실수이므로 정수로 깎으면 소수부가 사라진다.
+    /// </remarks>
+    /// <exception cref="ArgumentException">raw 범위 폭이 0일 때.</exception>
+    public double ToEngineering(double raw)
+    {
+        var span = RawMax - RawMin;
+        if (span == 0)
+        {
+            throw new ArgumentException($"raw 범위 폭이 0입니다 (min={RawMin}, max={RawMax})", nameof(raw));
+        }
+
+        return EngineeringMin + ((raw - RawMin) / span * (EngineeringMax - EngineeringMin));
+    }
+
+    /// <summary>
+    /// 공학단위 값을 **실수 raw** 로 변환한다. 정수로 반올림하지 않고 raw 경계로만 클램프한다.
+    /// </summary>
+    /// <exception cref="ArgumentException">공학단위 범위 폭이 0일 때.</exception>
+    public double ToRawValue(double engineeringValue)
+    {
+        var span = EngineeringMax - EngineeringMin;
+        if (span == 0)
+        {
+            throw new ArgumentException(
+                $"공학단위 범위 폭이 0입니다 (min={EngineeringMin}, max={EngineeringMax})",
+                nameof(engineeringValue));
+        }
+
+        var raw = RawMin + ((engineeringValue - EngineeringMin) / span * (RawMax - RawMin));
+        return Math.Clamp(raw, Math.Min(RawMin, RawMax), Math.Max(RawMin, RawMax));
+    }
+
     /// <summary>raw 값을 메모리에 담을 워드로 바꾼다(2의 보수).</summary>
     public static ushort RawToWord(int raw) => unchecked((ushort)raw);
 

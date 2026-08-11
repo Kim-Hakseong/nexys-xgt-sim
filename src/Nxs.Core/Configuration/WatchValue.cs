@@ -186,6 +186,28 @@ public static class WatchValue
         var bits = byteLength * 8;
         var max = bits >= 64 ? ulong.MaxValue : (1UL << bits) - 1;
 
+        // 2진 형식은 화면에 "0001 0010 0011 0100" 처럼 나오므로 그 표기를 그대로 되받는다.
+        // 되받지 못하면 사용자가 화면의 값을 고쳐 쓸 수 없어 형식 선택이 반쪽이 된다.
+        if (format is WatchFormat.Binary)
+        {
+            var digits = raw.StartsWith("0b", StringComparison.OrdinalIgnoreCase) ? raw[2..] : raw;
+            digits = digits.Replace(" ", string.Empty, StringComparison.Ordinal)
+                .Replace("_", string.Empty, StringComparison.Ordinal);
+
+            if (digits.Length == 0 || digits.Length > bits || digits.Any(c => c is not ('0' or '1')))
+            {
+                return null;
+            }
+
+            ulong binary = 0;
+            foreach (var c in digits)
+            {
+                binary = (binary << 1) | (uint)(c - '0');
+            }
+
+            return Integer(binary, byteLength, order);
+        }
+
         if (raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
         {
             return ulong.TryParse(raw[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex)
@@ -257,6 +279,107 @@ public static class WatchValue
 
         var half = 1L << ((byteLength * 8) - 1);
         return (-half, half - 1);
+    }
+
+    /// <summary>
+    /// 바이트를 지정 형식의 **수치**로 해석한다. A/D 채널이 raw ↔ 공학단위를 환산할 때 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Render"/> 는 사람이 읽는 문자열을 만들지만, 스케일 계산에는 수치가 필요하다.
+    /// 두 경로가 같은 형식·순서 해석을 쓰도록 여기 한곳에 모아 둔다 —
+    /// 표시와 계산이 갈라지면 화면 값과 메모리 값이 어긋난다.
+    /// </remarks>
+    /// <returns>수치. 형식이 폭과 맞지 않으면 null.</returns>
+    public static double? ToNumber(ReadOnlySpan<byte> memoryBytes, WatchFormat format, ByteOrder order)
+    {
+        if (memoryBytes.IsEmpty || !SupportsWidth(format, memoryBytes.Length))
+        {
+            return null;
+        }
+
+        var msb = ToMsbFirst(memoryBytes, order);
+        switch (format)
+        {
+            case WatchFormat.Float:
+                return BinaryPrimitives.ReadSingleBigEndian(msb);
+
+            case WatchFormat.Double:
+                return BinaryPrimitives.ReadDoubleBigEndian(msb);
+
+            case WatchFormat.Bool:
+                return msb.Any(b => b != 0) ? 1 : 0;
+
+            case WatchFormat.Signed:
+                return ToSigned(memoryBytes, order);
+
+            default:
+            {
+                // Decimal / Hex / Binary 는 모두 같은 부호 없는 정수를 다르게 표기한 것이다.
+                ulong raw = 0;
+                foreach (var b in msb)
+                {
+                    raw = (raw << 8) | b;
+                }
+
+                return raw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 수치를 지정 형식의 메모리 바이트로 만든다. <see cref="ToNumber"/> 의 역방향이다.
+    /// </summary>
+    /// <remarks>
+    /// 정수 계열 형식에서는 반올림한다 — 공학단위 환산은 실수를 내는데 정수 형식에 담아야 하기 때문이다.
+    /// 폭에 담기지 않는 값은 null 을 돌려 조용히 잘리지 않게 한다.
+    /// </remarks>
+    /// <returns>메모리에 쓸 바이트. 형식·폭·범위가 맞지 않으면 null.</returns>
+    public static byte[]? FromNumber(double value, int byteLength, WatchFormat format, ByteOrder order)
+    {
+        if (byteLength <= 0 || !SupportsWidth(format, byteLength) || !double.IsFinite(value))
+        {
+            return null;
+        }
+
+        switch (format)
+        {
+            case WatchFormat.Float:
+            {
+                var single = (float)value;
+                if (!float.IsFinite(single))
+                {
+                    return null;
+                }
+
+                var buffer = new byte[FloatBytes];
+                BinaryPrimitives.WriteSingleBigEndian(buffer, single);
+                return FromMsbFirst(buffer, order);
+            }
+
+            case WatchFormat.Double:
+            {
+                var buffer = new byte[DoubleBytes];
+                BinaryPrimitives.WriteDoubleBigEndian(buffer, value);
+                return FromMsbFirst(buffer, order);
+            }
+
+            case WatchFormat.Bool:
+                return Integer(value != 0 ? 1UL : 0UL, byteLength, order);
+
+            case WatchFormat.Signed:
+            {
+                var rounded = Math.Round(value, MidpointRounding.AwayFromZero);
+                var (min, max) = SignedRange(byteLength);
+                return rounded < min || rounded > max ? null : FromSigned((long)rounded, byteLength, order);
+            }
+
+            default:
+            {
+                var rounded = Math.Round(value, MidpointRounding.AwayFromZero);
+                var max = byteLength >= 8 ? ulong.MaxValue : (1UL << (byteLength * 8)) - 1;
+                return rounded < 0 || rounded > max ? null : Integer((ulong)rounded, byteLength, order);
+            }
+        }
     }
 
     /// <summary>이 형식이 지정 폭에서 쓸 수 있는지.</summary>

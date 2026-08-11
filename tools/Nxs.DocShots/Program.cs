@@ -276,6 +276,7 @@ public static class Program
             ("%IW80", "탱크 압력", "4000", "10", "bar"),
             ("%IW81", "유량", "4000", "250", "L/min"),
             ("%MW600", "노즐 온도", "4000", "400", "C"),
+            ("%MD500", "압력 (실수 raw)", "4000", "10", "MPa"),
         })
         {
             viewModel.NewAnalogAddress = address;
@@ -291,6 +292,11 @@ public static class Program
         viewModel.AnalogPoints[0].EngineeringText = "6.25";
         viewModel.AnalogPoints[1].EngineeringText = "132.5";
         viewModel.AnalogPoints[2].RawText = "1850";
+
+        // 마스터가 워드에 IEEE754 실수를 넣는 채널 — 형식을 먼저 정한 뒤 값을 넣는다
+        // (형식이 파싱 규칙을 정하므로 순서가 뒤바뀌면 다른 바이트가 들어간다).
+        viewModel.AnalogPoints[3].Format = Core.Configuration.WatchFormat.Float;
+        viewModel.AnalogPoints[3].EngineeringText = "3.75";
 
         // 사용자 지정 디지털 점 — 임의 비트 주소를 양방향으로 확인
         foreach (var (address, label) in new[]

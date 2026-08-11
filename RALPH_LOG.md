@@ -569,3 +569,35 @@ Tests 507/507 (Core 300 + Integration 61 + App 146) · 빌드 경고0/에러0
 [미확인] 연속 쓰기 수정이 실제 랩뷰 쓰기 실패를 해소했는지는 현장 확인이 필요하다.
   재현되면 자동 캡처된 `fixtures/labview-capture/req_*.txt` hex 가 답을 준다.
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요) · 랩뷰 쓰기 현장 재확인
+
+## M17 — A/D 채널 raw 형식·바이트 순서 선택 (사용자 지시) · 2026-08-11
+Status ✅
+Files: src/Nxs.Core/Configuration/{WatchValue,AnalogChannelScale,AnalogPointEntry}.cs,
+  src/Nxs.App/ViewModels/AnalogPointViewModel.cs, src/Nxs.App/Views/MainWindow.axaml,
+  tools/Nxs.DocShots/Program.cs, README.md,
+  tests/Nxs.Core.Tests/Configuration/WatchValueNumberTests.cs,
+  tests/Nxs.App.Tests/AnalogFormatSelectionTests.cs
+Tests 545/545 (Core 325 + Integration 61 + App 159) · 빌드 경고0/에러0
+
+[증상] A/D 탭에서 %MD220 의 raw 가 999999961, 공학단위가 2499999.903 으로 표시됐다.
+  A/D 는 raw 를 부호 있는 정수로만 읽고 있었는데, 마스터가 그 워드에 IEEE754 실수를 넣으면
+  실수의 비트 패턴을 정수로 읽은 값이 나온다 — 스케일 환산이 무의미해진다.
+[결정] **워치와 같은 형식·바이트 순서 선택을 A/D 채널마다 둔다.** 값 기준을 맞추는 문제는
+  워치에서 이미 같은 방식으로 해결했다 — 같은 문제에 다른 UI 를 두면 배울 것이 두 배가 된다.
+  ON/OFF 는 아날로그 채널에 의미가 없어 목록에서 뺐고, 폭에 맞지 않는 형식(2바이트 주소의 Float)은
+  애초에 노출하지 않는다.
+[결정] **표시와 계산을 한 곳에서 해석한다.** Render/Parse 는 문자열을 다루지만 스케일 환산에는
+  수치가 필요하다. 두 경로가 갈라지면 화면 값과 메모리 값이 어긋나므로
+  WatchValue.ToNumber/FromNumber 를 추가해 같은 형식·순서 해석을 공유하게 했다.
+  정수 형식에서는 반올림하고, 폭에 담기지 않는 값은 조용히 자르지 않고 null 로 거절한다.
+[결정] AnalogChannelScale 에 **실수 오버로드**(ToEngineering(double) · ToRawValue)를 더했다.
+  기존 정수 경로는 그대로 두어 호출부 동작이 바뀌지 않게 하고, 실수 raw 채널만 새 경로를 쓴다.
+  ToRawValue 는 반올림하지 않고 raw 경계로만 클램프한다 — 소수부를 살리는 것이 목적이므로.
+[버그 수정] **2진 형식이 화면의 표기를 되받지 못했다.** Render 는 "0001 0010 0011 0100" 을 내는데
+  Parse 는 그 문자열을 10진으로 읽으려다 실패했다. 즉 2진으로 보이는 값을 고쳐 쓸 수 없었다 —
+  A/D 에 형식 선택을 노출하면서 드러난 기존 결함이다. 공백·`_`·`0b` 접두를 받아 2진으로 파싱한다.
+  (부작용: 2진 형식에서 "1234" 같은 10진 입력은 이제 거절된다. 2진 필드에 10진을 받는 편이
+  오히려 조용한 오해였다.)
+[결정] 저장된 형식이 주소 폭과 맞지 않으면(손으로 고친 .nxp 등) 예외 대신 폭에 맞는 첫 형식으로
+  되돌린다 — 프로젝트 하나 때문에 앱이 열리지 않는 편이 더 나쁘다.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요) · 랩뷰 쓰기 현장 재확인

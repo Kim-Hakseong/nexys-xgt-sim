@@ -181,7 +181,7 @@
             <StackPanel Spacing="8">
               <TextBlock Classes="sectionTitle" Text="A/D 채널 주소 추가" />
               <TextBlock Classes="muted" TextWrapping="Wrap"
-                         Text="센서가 내는 아날로그 값을 흉내낸다. 공학단위(5 V)를 넣으면 스케일로 raw(2000)로 바꿔 메모리에 쓰고, 마스터가 그 워드를 실제 센서처럼 읽는다. 비트 주소는 쓸 수 없다." />
+                         Text="센서가 내는 아날로그 값을 흉내낸다. 공학단위(5 V)를 넣으면 스케일로 raw(2000)로 바꿔 메모리에 쓰고, 마스터가 그 워드를 실제 센서처럼 읽는다. 비트 주소는 쓸 수 없다.&#10;각 채널마다 raw 표시 형식과 바이트 순서를 고를 수 있다 — 마스터가 워드에 IEEE754 실수를 넣는다면 Float(4바이트 %..D) · Double(8바이트 %..L) 로 바꿔야 값이 맞는다." />
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <StackPanel Spacing="2">
                   <TextBlock Classes="fieldLabel" Text="주소" />
@@ -256,12 +256,28 @@
                         <PathIcon Data="{StaticResource IconRemove}" />
                       </Button>
 
-                      <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="7"
-                                  Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                      <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                  Orientation="Horizontal" Spacing="10" Margin="0,10,0,0"
+                                  VerticalAlignment="Center">
                         <TextBlock Text="{Binding ScaleText}"
-                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
                         <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap"
+                                   VerticalAlignment="Center"
                                    IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                      </StackPanel>
+
+                      <!-- raw 를 어떤 형식·바이트 순서로 읽고 쓸지 — 마스터와 값 기준을 맞춘다 -->
+                      <StackPanel Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="4"
+                                  Orientation="Horizontal" Spacing="8" Margin="0,10,0,0"
+                                  HorizontalAlignment="Right">
+                        <ComboBox Width="164" ItemsSource="{Binding FormatOptions}"
+                                  SelectedItem="{Binding SelectedFormatOption}"
+                                  ToolTip.Tip="raw 표시 형식 — 마스터가 워드에 실수를 넣으면 Float/Double 로 고른다" />
+                        <ComboBox Width="164" ItemsSource="{Binding OrderOptions}"
+                                  SelectedItem="{Binding SelectedOrderOption}"
+                                  ToolTip.Tip="바이트 순서 (워드오더) — 마스터와 값 기준을 맞춘다"
+                                  IsVisible="{Binding SupportsByteOrder}" />
                       </StackPanel>
                     </Grid>
                   </Border>

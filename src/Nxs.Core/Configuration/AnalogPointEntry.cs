@@ -30,6 +30,15 @@ public sealed record AnalogPointEntry
     /// <summary>바이트 순서(워드오더). 기본은 XGT 저장 방식인 리틀엔디안.</summary>
     public ByteOrder Order { get; init; } = ByteOrder.Dcba;
 
+    /// <summary>
+    /// raw 값을 어떤 형식으로 읽고 쓸지. 기본은 A/D 모듈의 관례인 부호 있는 정수다.
+    /// </summary>
+    /// <remarks>
+    /// 마스터가 워드에 IEEE754 실수를 넣는 경우가 있다 — 그때 정수로 읽으면
+    /// 999999961 같은 값이 나와 스케일 환산이 무의미해진다. 워치와 같은 형식 선택을 둔다.
+    /// </remarks>
+    public WatchFormat Format { get; init; } = WatchFormat.Signed;
+
     /// <summary>주소를 해석한다.</summary>
     /// <exception cref="FormatException">표기가 올바르지 않을 때.</exception>
     /// <exception cref="InvalidOperationException">비트 주소일 때.</exception>
