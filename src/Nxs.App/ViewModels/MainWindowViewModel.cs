@@ -31,6 +31,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private DisplayOption<TrafficDirectionFilter> _selectedDirectionOption = null!;
 
+    /// <summary>새 묶음 주소 입력 — 공백이나 쉼표로 구분한다.</summary>
+    [ObservableProperty]
+    private string _newLinkAddresses = string.Empty;
+
+    /// <summary>새 묶음 별칭.</summary>
+    [ObservableProperty]
+    private string _newLinkLabel = string.Empty;
+
+    /// <summary>묶음 탭 안내·오류 문구.</summary>
+    [ObservableProperty]
+    private string _linkNotice = string.Empty;
+
     /// <summary>범위 보기 시작 주소.</summary>
     [ObservableProperty]
     private string _rangeStartAddress = "%MW0";
@@ -373,6 +385,99 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             ExpandRange();
         }
+    }
+
+    /// <summary>주소 묶음 목록.</summary>
+    public ObservableCollection<LinkGroupViewModel> LinkGroups { get; } = [];
+
+    /// <summary>묶음이 하나라도 있는지.</summary>
+    public bool HasLinkGroups => LinkGroups.Count > 0;
+
+    /// <summary>묶음을 추가한다.</summary>
+    [RelayCommand]
+    private void AddLinkGroup()
+    {
+        ErrorMessage = null;
+
+        var tokens = NewLinkAddresses
+            .Split(new[] { ' ', ',', '\t', '\n', '\r', ';' }, StringSplitOptions.RemoveEmptyEntries
+                | StringSplitOptions.TrimEntries)
+            .ToArray();
+
+        if (tokens.Length < 2)
+        {
+            LinkNotice = "묶으려면 주소가 2개 이상 필요합니다 (예: %MW0 %MW1 · %MW0.10 %MW1.10)";
+            return;
+        }
+
+        var members = new List<IecAddress>(tokens.Length);
+        foreach (var token in tokens)
+        {
+            // 전각 문자·공백은 다른 입력과 같은 경로로 정규화한다. 점(.)은 비트 표기라 남긴다.
+            var normalized = AddressInput.Normalize(token);
+            if (!BitNotation.TryParse(normalized, out var address, out var error, Engine.Memory.Addressing))
+            {
+                LinkNotice = $"'{token}' 을 해석할 수 없습니다 — {error?.Message}";
+                return;
+            }
+
+            members.Add(address!);
+        }
+
+        ResolvedLinkGroup group;
+        try
+        {
+            group = new ResolvedLinkGroup(members, NewLinkLabel.Trim());
+        }
+        catch (ArgumentException ex)
+        {
+            LinkNotice = ex.Message;
+            return;
+        }
+
+        if (LinkGroups.Count >= MemoryLinks.MaxGroups)
+        {
+            LinkNotice = $"묶음은 {MemoryLinks.MaxGroups}개까지입니다";
+            return;
+        }
+
+        LinkGroups.Add(new LinkGroupViewModel(Engine.Memory, group, RemoveLinkGroup));
+        ApplyLinks();
+
+        NewLinkAddresses = string.Empty;
+        NewLinkLabel = string.Empty;
+        LinkNotice = $"묶었습니다: {group.Text}";
+    }
+
+    /// <summary>묶음을 뺀다.</summary>
+    private void RemoveLinkGroup(LinkGroupViewModel row)
+    {
+        if (LinkGroups.Remove(row))
+        {
+            ApplyLinks();
+            LinkNotice = $"묶음을 풀었습니다: {row.Group.Text}";
+        }
+    }
+
+    /// <summary>묶음을 모두 푼다.</summary>
+    [RelayCommand]
+    private void ClearLinkGroups()
+    {
+        if (LinkGroups.Count == 0)
+        {
+            return;
+        }
+
+        LinkGroups.Clear();
+        ApplyLinks();
+        LinkNotice = "묶음을 모두 풀었습니다.";
+    }
+
+    /// <summary>현재 목록을 메모리에 반영한다.</summary>
+    private void ApplyLinks()
+    {
+        Engine.Memory.Links = new MemoryLinks(LinkGroups.Select(g => g.Group).ToArray());
+        OnPropertyChanged(nameof(HasLinkGroups));
     }
 
     /// <summary>사용자 지정 워치 목록.</summary>
@@ -1021,6 +1126,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             cell.Refresh();
         }
 
+        foreach (var link in LinkGroups)
+        {
+            link.Refresh();
+        }
+
         RefreshTraffic();
         OnPropertyChanged(nameof(CaptureSummary));
         NotifyServerState();
@@ -1112,6 +1222,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Watches = Watches.Select(w => w.ToEntry()).ToArray(),
             DigitalPoints = DigitalGroups.Select(g => g.Entry).ToArray(),
             AnalogPoints = AnalogPoints.Select(p => p.ToEntry()).ToArray(),
+            Links = LinkGroups.Select(g => g.Group.ToEntry()).ToArray(),
         };
     }
 
@@ -1218,9 +1329,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
+        // 엔진이 이미 project.Links 를 메모리에 걸어 뒀다 — 화면 목록은 거기서 그대로 가져온다.
+        LinkGroups.Clear();
+        foreach (var group in Engine.Memory.Links.Groups)
+        {
+            LinkGroups.Add(new LinkGroupViewModel(Engine.Memory, group, RemoveLinkGroup));
+        }
+
+        LinkNotice = Engine.LinkProblems.Count > 0
+            ? string.Join(" / ", Engine.LinkProblems)
+            : string.Empty;
+
+        RangeCells.Clear();
+        SelectedRangeCell = null;
+
         OnPropertyChanged(nameof(HasWatches));
         OnPropertyChanged(nameof(HasDigitalGroups));
         OnPropertyChanged(nameof(HasAnalogPoints));
+        OnPropertyChanged(nameof(HasLinkGroups));
+        OnPropertyChanged(nameof(HasRangeCells));
         OnPropertyChanged(nameof(RackSummary));
         OnPropertyChanged(nameof(HasAutomationRules));
         OnPropertyChanged(nameof(IsAutomationRunning));

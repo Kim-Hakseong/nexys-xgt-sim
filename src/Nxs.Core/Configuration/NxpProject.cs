@@ -100,12 +100,61 @@ public sealed record NxpProject
     /// </summary>
     public IReadOnlyList<DigitalPointEntry> DigitalPoints { get; init; } = [];
 
+    /// <summary>
+    /// 주소 묶음 — 여기 묶인 주소들은 항상 같은 값을 갖는다.
+    /// </summary>
+    /// <remarks>
+    /// 실장비에서는 PLC 프로그램이 값을 옮기는데 시뮬레이터에는 그 프로그램이 없다.
+    /// 묶음이 그 자리를 메운다(<see cref="MemoryLinks"/>).
+    /// </remarks>
+    public IReadOnlyList<MemoryLinkGroup> Links { get; init; } = [];
+
     /// <summary>CONTEXT 기재 랙 기반 기본 프로젝트를 만든다.</summary>
     public static NxpProject CreateDefault(int port) => new()
     {
         Io = IoConfiguration.CreateDefaultRack(),
         Server = new ServerSettings { Port = port },
     };
+
+    /// <summary>
+    /// 묶음 설정을 해석한다. 해석할 수 없는 묶음은 건너뛰고 사유를 모아 돌려준다.
+    /// </summary>
+    /// <remarks>
+    /// 손으로 고친 .nxp 의 묶음 하나 때문에 프로젝트 전체가 열리지 않으면 곤란하다 —
+    /// 나머지는 살리고 무엇을 왜 버렸는지 알린다.
+    /// </remarks>
+    /// <param name="problems">건너뛴 묶음의 사유.</param>
+    public MemoryLinks BuildLinks(out IReadOnlyList<string> problems)
+    {
+        var resolved = new List<ResolvedLinkGroup>(Links.Count);
+        var issues = new List<string>();
+
+        foreach (var group in Links)
+        {
+            try
+            {
+                var members = group.Addresses
+                    .Select(a => BitNotation.Parse(a, Io.Addressing))
+                    .ToArray();
+                resolved.Add(new ResolvedLinkGroup(members, group.Label));
+            }
+            catch (Exception ex) when (ex is FormatException or ArgumentException
+                or ArgumentOutOfRangeException or InvalidOperationException)
+            {
+                issues.Add($"묶음 [{string.Join(", ", group.Addresses)}] 를 건너뜁니다 — {ex.Message}");
+            }
+        }
+
+        problems = issues;
+
+        if (resolved.Count <= MemoryLinks.MaxGroups)
+        {
+            return new MemoryLinks(resolved);
+        }
+
+        issues.Add($"묶음이 {MemoryLinks.MaxGroups}개를 넘어 뒷부분을 버립니다");
+        return new MemoryLinks(resolved.Take(MemoryLinks.MaxGroups).ToArray());
+    }
 
     /// <summary>초기값을 메모리에 적용한다.</summary>
     /// <exception cref="FormatException">주소 표기를 해석할 수 없을 때.</exception>

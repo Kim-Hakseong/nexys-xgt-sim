@@ -342,7 +342,7 @@ public class FrameAnatomyPanelTests
         window.Show();
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
-        tabControl.SelectedIndex = 4;   // 트래픽 로그
+        tabControl.SelectedIndex = 5;   // 트래픽 로그
         vm.SelectedTrafficRow = vm.TrafficRows[0];
 
         Dispatcher.UIThread.RunJobs();

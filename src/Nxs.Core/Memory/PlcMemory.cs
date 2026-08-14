@@ -12,10 +12,22 @@ namespace Nxs.Core.Memory;
 /// </remarks>
 public sealed class PlcMemory
 {
+    /// <summary>
+    /// 지금 이 스레드에서 묶음 전파 중인 메모리. 전파가 다시 전파를 부르는 것을 막는다.
+    /// </summary>
+    /// <remarks>
+    /// 스레드별로 두는 이유: 전파는 쓴 스레드에서 동기적으로 일어난다. 인스턴스 필드로 두면
+    /// A 스레드의 전파가 B 스레드의 정상 쓰기까지 삼켜 버린다.
+    /// 값을 인스턴스로 두는 이유: 같은 스레드에서 다른 메모리를 쓰는 경우까지 막을 이유가 없다.
+    /// </remarks>
+    [ThreadStatic]
+    private static PlcMemory? _propagatingFor;
+
     private readonly object _gate = new();
     private readonly byte[] _inputs;
     private readonly byte[] _outputs;
     private readonly byte[] _internal;
+    private volatile MemoryLinks _links = MemoryLinks.Empty;
 
     /// <summary>메모리를 만든다.</summary>
     public PlcMemory(PlcMemoryOptions? options = null)
@@ -32,6 +44,19 @@ public sealed class PlcMemory
 
     /// <summary>주소 산법 설정.</summary>
     public AddressingOptions Addressing { get; }
+
+    /// <summary>
+    /// 주소 묶음. 한쪽에 값이 들어가면 같은 묶음의 나머지 주소로 퍼진다.
+    /// </summary>
+    /// <remarks>
+    /// 마스터가 쓰든 사용자가 화면에서 쓰든 모든 쓰기가 이 클래스를 지나므로,
+    /// 전파를 여기 두면 경로마다 따로 챙길 필요가 없다.
+    /// </remarks>
+    public MemoryLinks Links
+    {
+        get => _links;
+        set => _links = value ?? MemoryLinks.Empty;
+    }
 
     /// <summary>영역별 바이트 크기.</summary>
     public int AreaSizeBytes { get; }
@@ -65,6 +90,8 @@ public sealed class PlcMemory
                 buffer[byteIndex] &= (byte)~mask;
             }
         }
+
+        Propagate(area, bitIndex, 1);
     }
 
     /// <summary>주소가 가리키는 비트를 읽는다.</summary>
@@ -150,6 +177,8 @@ public sealed class PlcMemory
                     throw new ArgumentOutOfRangeException(nameof(address), address.Size, "알 수 없는 크기 지정자");
             }
         }
+
+        Propagate(address.Area, address.ByteStart * 8, address.ByteLength * 8);
     }
 
     /// <summary>연속 바이트를 읽는다.</summary>
@@ -173,10 +202,13 @@ public sealed class PlcMemory
     {
         EnsureRange(area, byteStart, data.Length);
         var buffer = Buffer(area);
+        var length = data.Length;
         lock (_gate)
         {
-            data.CopyTo(buffer.AsSpan(byteStart, data.Length));
+            data.CopyTo(buffer.AsSpan(byteStart, length));
         }
+
+        Propagate(area, byteStart * 8, length * 8);
     }
 
     /// <summary>연속 워드를 읽는다.</summary>
@@ -218,6 +250,8 @@ public sealed class PlcMemory
                 BinaryPrimitives.WriteUInt16LittleEndian(span[(i * 2)..], data[i]);
             }
         }
+
+        Propagate(area, byteStart * 8, byteLength * 8);
     }
 
     /// <summary>주소가 참조하는 바이트를 그대로 읽는다 (엔디안 해석 없음).</summary>
@@ -256,6 +290,45 @@ public sealed class PlcMemory
         }
 
         WriteBytes(address.Area, address.ByteStart, data);
+    }
+
+    /// <summary>
+    /// 방금 쓴 자리와 겹치는 묶음을 찾아 값을 나머지 멤버로 퍼뜨린다.
+    /// </summary>
+    /// <remarks>
+    /// 락 **밖에서** 부른다 — 전파가 다시 쓰기를 부르므로 락 안에서 부르면 재진입한다
+    /// (Monitor 는 재진입을 허용하지만, 그러면 전파 도중의 중간 상태가 다른 읽기에게 보인다).
+    /// 대신 각 쓰기가 개별적으로 원자적이다.
+    /// </remarks>
+    private void Propagate(MemoryArea area, int startBit, int bitCount)
+    {
+        var links = _links;
+        if (links.IsEmpty || ReferenceEquals(_propagatingFor, this))
+        {
+            return;
+        }
+
+        _propagatingFor = this;
+        try
+        {
+            foreach (var (group, source) in links.Affected(area, startBit, bitCount))
+            {
+                var value = ReadRaw(source);
+                foreach (var member in group.Members)
+                {
+                    if (ReferenceEquals(member, source))
+                    {
+                        continue;
+                    }
+
+                    WriteRaw(member, value);
+                }
+            }
+        }
+        finally
+        {
+            _propagatingFor = null;
+        }
     }
 
     /// <summary>영역 전체의 스냅샷을 만든다 (UI 갱신용).</summary>

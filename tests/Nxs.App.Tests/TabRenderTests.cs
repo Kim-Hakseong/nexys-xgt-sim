@@ -91,7 +91,7 @@ public class TabRenderTests
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
         var tabCount = tabControl.ItemCount;
-        Assert.Equal(5, tabCount);
+        Assert.Equal(6, tabCount);
 
         for (var i = 0; i < tabCount; i++)
         {
@@ -205,7 +205,7 @@ public class TabRenderTests
             .Select(t => t.Header?.ToString() ?? string.Empty).ToList();
 
         Assert.Equal(
-            new[] { "디지털 I/O", "A/D 입력", "주소 워치", "범위 보기", "트래픽 로그" },
+            new[] { "디지털 I/O", "A/D 입력", "주소 워치", "묶음", "범위 보기", "트래픽 로그" },
             headers);
         Assert.DoesNotContain("값 자동화", headers);
         Assert.DoesNotContain("랙 구성", headers);

@@ -32,7 +32,8 @@ public static class Program
         (0, "01-digital-io"),
         (1, "02-analog-input"),
         (2, "03-watch"),
-        (3, "04-range"),
+        (3, "04-links"),
+        (4, "05-range"),
     ];
 
     public static int Main(string[] args)
@@ -168,7 +169,7 @@ public static class Program
         Settle(window);
 
         var tabControl = window.GetLogicalDescendants().OfType<TabControl>().First();
-        tabControl.SelectedIndex = 4;   // 트래픽 로그
+        tabControl.SelectedIndex = 5;   // 트래픽 로그
         Settle(window);
 
         // 거절된 행을 골라 전문 패널이 어떻게 보이는지 함께 담는다 — 진단 흐름의 핵심이다.
@@ -186,17 +187,17 @@ public static class Program
 
         Settle(window);
 
-        var path = Path.Combine(outputDirectory, "05-traffic-log.png");
+        var path = Path.Combine(outputDirectory, "06-traffic-log.png");
         using var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {
-            Console.Error.WriteLine("렌더 실패: 05-traffic-log");
+            Console.Error.WriteLine("렌더 실패: 06-traffic-log");
             viewModel.Shutdown();
             return false;
         }
 
         frame.Save(path);
-        Console.WriteLine($"05-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 실제 XGT 세션)");
+        Console.WriteLine($"06-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 실제 XGT 세션)");
         viewModel.Shutdown();
         return true;
     }
@@ -403,6 +404,23 @@ public static class Program
         // (형식이 파싱 규칙을 정하므로 순서가 뒤바뀌면 다른 바이트가 들어간다).
         viewModel.AnalogPoints[3].Format = Core.Configuration.WatchFormat.Float;
         viewModel.AnalogPoints[3].EngineeringText = "3.75";
+
+        // 묶음 — 워드끼리 · 워드 사이 비트 · 한 워드 안의 두 비트, 세 가지 모양을 모두 보인다
+        foreach (var (addresses, label) in new[]
+        {
+            ("%MW0 %MW1", "운전 지령 미러 (워드끼리)"),
+            ("%MW0.10 %MW1.10", "MW0·MW1 의 10번 비트"),
+            ("%MW20.3 %MW20.7", "한 워드 안의 두 비트"),
+            ("%MD100 %MD200", "적산값 미러 (더블워드)"),
+        })
+        {
+            viewModel.NewLinkAddresses = addresses;
+            viewModel.NewLinkLabel = label;
+            viewModel.AddLinkGroupCommand.Execute(null);
+        }
+
+        viewModel.Engine.Memory.WriteScalar(Core.Memory.IecAddress.Parse("%MW0"), 0x0400);
+        viewModel.Engine.Memory.WriteBit(Core.Memory.BitNotation.Parse("%MW20.3"), true);
 
         // 범위 보기 — 마스터가 값을 바꾼 칸이 물드는 모습을 담는다
         for (var i = 0; i < 100; i += 7)

@@ -699,3 +699,33 @@ Tests 660/660 (Core 385 + Integration 61 + App 214) · 빌드 경고0/에러0
 [결정] 트래픽 스크린샷을 **실제 XGT 세션**으로 바꿨다. 합성 코덱으로 찍으면 해부 패널이
   "잘린 헤더"만 보여 주어 화면이 무엇을 해 주는지 나타내지 못한다. README 의 합성 코덱 주의문도 삭제.
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)
+
+## M21 — 주소 묶음(클러스터) (사용자 지시) · 2026-08-14
+Status ✅
+Files: src/Nxs.Core/Memory/{MemoryLinks,BitNotation,PlcMemory}.cs,
+  src/Nxs.Core/Configuration/NxpProject.cs, src/Nxs.Core/Simulator/SimulatorEngine.cs,
+  src/Nxs.App/ViewModels/{LinkGroupViewModel,MainWindowViewModel}.cs,
+  src/Nxs.App/Views/MainWindow.axaml, tools/Nxs.DocShots/Program.cs, README.md,
+  tests/Nxs.Core.Tests/Memory/MemoryLinkTests.cs, tests/Nxs.App.Tests/LinkGroupTabTests.cs
+Tests 726/726 (Core 429 + Integration 61 + App 236) · 빌드 경고0/에러0
+
+[결정] **전파는 PlcMemory 에 둔다.** 마스터가 쓰든 화면에서 쓰든 모든 쓰기가 이 클래스를 지난다 —
+  코덱·뷰모델마다 따로 챙기면 반드시 한 곳을 빠뜨린다(실제로 "시뮬→랩뷰만 되고 반대는 안 되던"
+  M18 이 그런 부류였다). 쓰기 지점 네 곳(WriteBit·WriteScalar·WriteBytes·WriteWords)에 훅을 건다.
+[결정] **겹침 판정은 비트 단위.** 바이트 단위로 하면 같은 워드 안의 10번 비트와 12번 비트를
+  구분하지 못해, 10번에 쓴 것이 12번에 쓴 것으로 오인된다. 사용자가 요청한 세 번째 예시가 정확히 그 경우다.
+[결정] **한 번의 쓰기가 같은 묶음의 멤버를 여러 개 덮으면 가장 낮은 번지가 원본.**
+  임의로 정한 규칙이지만 정해 두어야 하는 규칙이다 — 정하지 않으면 같은 프레임에 결과가 달라진다.
+  연속 쓰기가 %MW0·%MW1 을 함께 덮는 경우가 실제로 있다.
+[결정] **묶음은 방향이 없다(대칭).** "묶는다"는 말에 방향이 없다. 어느 쪽에 써도 나머지로 퍼진다.
+[결정] **`%MW1.10` 점 표기를 받는다(BitNotation).** 사용자는 "MW1 의 10번째 비트" 로 생각하는데,
+  IEC 표기로 쓰려면 절대 비트 번지 %MX26 을 직접 계산해야 한다. 사람이 매번 할 일이 아니고,
+  틀려도 티가 안 난다. 워드 폭을 벗어난 비트 번호는 거절한다.
+[결정] **크기가 다른 주소는 묶지 않는다.** %MW 와 %MD 를 묶으면 무엇을 무엇에 복사할지 정할 수 없다 —
+  조용히 자르는 것보다 거절이 낫다.
+[결정] 재진입 가드는 **[ThreadStatic] + 인스턴스 비교**다. 인스턴스 필드로 두면 A 스레드의 전파가
+  B 스레드의 정상 쓰기까지 삼킨다. 스레드별 정적 bool 로 두면 같은 스레드의 다른 메모리까지 막는다.
+  "이 스레드에서 이 메모리를 전파 중" 이 정확한 조건이다.
+[결정] **초기값을 넣은 뒤에 묶음을 건다.** 먼저 걸면 초기값 하나가 묶음 전체를 덮어쓴다.
+[결정] 손상된 묶음은 건너뛰고 사유를 모아 알린다 — 묶음 하나 때문에 .nxp 가 안 열리면 곤란하다.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)

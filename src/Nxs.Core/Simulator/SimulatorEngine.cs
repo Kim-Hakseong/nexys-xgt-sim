@@ -62,6 +62,10 @@ public sealed class SimulatorEngine : IDisposable
         Map = project.Io.BuildMap();
         Memory = new PlcMemory(new PlcMemoryOptions { Addressing = project.Io.Addressing });
         project.ApplyInitialValues(Memory);
+
+        // 초기값을 넣은 **뒤에** 묶음을 건다 — 먼저 걸면 초기값 하나가 묶음 전체를 덮어쓴다.
+        Memory.Links = project.BuildLinks(out var linkProblems);
+        LinkProblems = linkProblems;
         Automation = new AutomationEngine(Memory, _time, project.BuildAutomationRules());
         TimeSource = _time;
     }
@@ -74,6 +78,9 @@ public sealed class SimulatorEngine : IDisposable
 
     /// <summary>이 엔진이 쓰는 시간원. 화면 갱신 로직이 같은 시계를 공유하게 한다.</summary>
     public ITimeSource TimeSource { get; }
+
+    /// <summary>열 때 건너뛴 묶음의 사유. 비어 있으면 전부 정상이다.</summary>
+    public IReadOnlyList<string> LinkProblems { get; private set; } = [];
 
     /// <summary>모듈 → 메모리 매핑.</summary>
     public IReadOnlyList<ModuleMapping> Map { get; }

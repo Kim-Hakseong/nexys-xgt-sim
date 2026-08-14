@@ -304,7 +304,7 @@ public class RangeViewTests
         vm.UseRangeCountCommand.Execute(10);
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
-        tabControl.SelectedIndex = 3;   // 범위 보기
+        tabControl.SelectedIndex = 4;   // 범위 보기
         Dispatcher.UIThread.RunJobs();
         window.Measure(new Avalonia.Size(window.Width, window.Height));
         window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
