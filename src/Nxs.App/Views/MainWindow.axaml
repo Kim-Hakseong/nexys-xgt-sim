@@ -428,7 +428,7 @@
               </ListBox.ItemsPanel>
               <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:RangeCellViewModel">
-                  <Border Classes="rangeCell"
+                  <Border Classes="rangeCell" Width="{Binding CellWidth}"
                           Classes.changed="{Binding IsRecentlyChanged}"
                           ToolTip.Tip="{Binding AddressText}">
                     <StackPanel Spacing="1">
@@ -479,6 +479,9 @@
                         ToolTip.Tip="RX = 마스터 → 시뮬 요청, TX = 시뮬 → 마스터 응답" />
               <CheckBox Content="오류만" IsChecked="{Binding ShowErrorsOnly}" VerticalAlignment="Center" />
               <CheckBox Content="일시정지" IsChecked="{Binding IsTrafficPaused}" VerticalAlignment="Center" />
+              <Button Content="{Binding TrafficSortLabel}" MinWidth="118"
+                      Command="{Binding ToggleTrafficSortCommand}"
+                      ToolTip.Tip="정렬 방향을 바꿉니다 — 기본은 최근이 위" />
               <Button Content="비우기" Command="{Binding ClearTrafficCommand}" />
               <Border Classes="pill" VerticalAlignment="Center">
                 <TextBlock Text="{Binding TrafficSummary}" FontSize="12" />
@@ -538,21 +541,103 @@
             </DataGrid>
           </Border>
 
-          <!-- 고른 행의 전문 — 표의 raw hex 열은 잘리므로 진단에는 이쪽을 쓴다 -->
+          <!-- 고른 행의 전문 — 구간을 이름 붙여 보여 주고, 누르면 그 바이트가 잡힌다 -->
           <Border Grid.Row="2" Classes="softCard" Padding="14" Margin="0,10,0,0"
                   IsVisible="{Binding HasSelectedTrafficRow}">
-            <StackPanel Spacing="6" DataContext="{Binding SelectedTrafficRow}">
+            <StackPanel Spacing="8">
               <Grid ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Grid.Column="0" Classes="sectionTitle" Text="선택한 프레임 전문"
                            FontSize="12" Margin="0,0,12,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding DetailHeaderText}"
-                           FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="mono" FontSize="11" TextWrapping="Wrap"
+                           VerticalAlignment="Center"
+                           Text="{Binding SelectedTrafficRow.DetailHeaderText}" />
                 <TextBlock Grid.Column="2" Classes="muted" FontSize="11" VerticalAlignment="Center"
-                           Text="드래그해 복사 — 진단 문의 시 이 전문을 보내면 됩니다" />
+                           Text="구간·주소를 누르면 전문에서 그 자리가 잡힙니다" />
               </Grid>
-              <SelectableTextBlock Text="{Binding SummaryText}" TextWrapping="Wrap" FontSize="12" />
-              <SelectableTextBlock FontFamily="Consolas,Menlo,monospace" FontSize="11"
-                                   Text="{Binding HexText}" TextWrapping="Wrap" />
+
+              <SelectableTextBlock Text="{Binding SelectedTrafficRow.SummaryText}"
+                                   TextWrapping="Wrap" FontSize="12" />
+
+              <!-- 프레임 안의 주소 — 누르면 그 주소가 쓰인 바이트가 잡힌다 -->
+              <StackPanel Orientation="Horizontal" Spacing="6"
+                          IsVisible="{Binding FrameAddresses.Count}">
+                <TextBlock Classes="muted" Text="주소" FontSize="11" VerticalAlignment="Center" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled" MaxWidth="900">
+                  <ItemsControl ItemsSource="{Binding FrameAddresses}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="4" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Button Classes="frameChip" Content="{Binding}"
+                                Command="{Binding $parent[ItemsControl].DataContext.SelectFrameAddressCommand}"
+                                CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </StackPanel>
+
+              <!-- 바이트 격자 — 헤더/이름/값이 배경색으로 구분되고 고른 구간은 블록으로 잡힌다 -->
+              <ScrollViewer MaxHeight="104" VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding FrameBytes}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:FrameByteViewModel">
+                      <Button Classes="frameByte"
+                              Classes.header="{Binding IsHeader}"
+                              Classes.name="{Binding IsName}"
+                              Classes.value="{Binding IsValue}"
+                              Classes.unknown="{Binding IsUnknown}"
+                              Classes.picked="{Binding IsHighlighted}"
+                              Content="{Binding HexText}"
+                              Command="{Binding $parent[ItemsControl].DataContext.SelectFrameByteCommand}"
+                              CommandParameter="{Binding}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+
+              <TextBlock Classes="mono" FontSize="11" TextWrapping="Wrap"
+                         Text="{Binding SelectedFrameFieldText}" />
+
+              <!-- 구간 목록 — 헤더가 어디까지인지 한눈에 -->
+              <ScrollViewer MaxHeight="118" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding FrameFields}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:FrameFieldViewModel">
+                      <Button Classes="frameField"
+                              Classes.header="{Binding IsHeader}"
+                              Classes.name="{Binding IsName}"
+                              Classes.value="{Binding IsValue}"
+                              Classes.unknown="{Binding IsUnknown}"
+                              Classes.picked="{Binding IsSelected}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Left"
+                              Command="{Binding $parent[ItemsControl].DataContext.SelectFrameFieldCommand}"
+                              CommandParameter="{Binding}">
+                        <Grid ColumnDefinitions="128,150,*">
+                          <TextBlock Grid.Column="0" Classes="mono" FontSize="11"
+                                     Text="{Binding RangeText}"
+                                     Foreground="{StaticResource TextSecondaryBrush}" />
+                          <TextBlock Grid.Column="1" FontSize="11" Text="{Binding Name}"
+                                     FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="2" Classes="mono" FontSize="11"
+                                     Text="{Binding Value}" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
             </StackPanel>
           </Border>
         </Grid>

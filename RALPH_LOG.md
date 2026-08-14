@@ -665,3 +665,37 @@ Tests 617/617 (Core 366 + Integration 61 + App 190) · 빌드 경고0/에러0
   테스트는 느리고 불안정하다. FakeTimeSource 로 경계 직전/직후를 정확히 고정했다.
 [결정] 칸을 고르면 그 자리에서 값을 쓰거나 워치로 옮길 수 있다 — 찾은 주소를 계속 지켜보는 경로.
 Next: spec §5 에러 코드 표 확정 · **현장 프레임 전문 확보**(트래픽 행 클릭 → 전문 패널)
+
+## M20 — 프레임 전문 해부 · 트래픽 정렬 · 범위 칸 잘림 수정 (사용자 지시) · 2026-08-14
+Status ✅ (양방향 현장 성공 확인 — v0.10.0 의 쓰기 수정이 통했다)
+Files: src/Nxs.Core/Protocol/Xgt/XgtFrameAnatomy.cs, src/Nxs.Core/Configuration/WatchValue.cs,
+  src/Nxs.App/ViewModels/{FrameFieldViewModel,RangeCellViewModel,MainWindowViewModel}.cs,
+  src/Nxs.App/{App.axaml,Views/MainWindow.axaml}, tools/Nxs.DocShots/Program.cs, README.md,
+  tests/Nxs.Core.Tests/Protocol/Xgt/XgtFrameAnatomyTests.cs,
+  tests/Nxs.App.Tests/{FrameAnatomyPanelTests,TrafficFilterUiTests}.cs
+Tests 660/660 (Core 385 + Integration 61 + App 214) · 빌드 경고0/에러0
+
+[확인] **현장에서 양방향 성공.** v0.10.0 의 "길이는 이름이 아니라 프레임이 정한다" 가 맞았다.
+[버그 수정] 범위 보기 칸이 잘렸다. 칸 너비가 118px 고정이라 2진 워드
+  (`0000 0100 1101 0010` 19글자)가 들어가지 않았다.
+  값에 맞춰 매번 재면 값이 바뀔 때마다 칸이 들썩이므로, **형식이 낼 수 있는 최대 글자 수**
+  (WatchValue.MaxRenderedLength)로 한 번만 정한다. 글꼴을 재지 않고 글자 수로 정하므로
+  결정적이고 테스트할 수 있다. 상한은 최악(LWORD 2진 79글자)도 담게 640px 로 뒀다.
+[결정] **트래픽 정렬 기본값을 "최근이 위"로.** 방금 오간 프레임이 눈앞에 있어야 한다.
+  버튼 하나로 뒤집되, 표시 상한(500)에 걸릴 때 **잘려 나가는 쪽은 항상 오래된 것**이다 —
+  정렬을 바꿨다고 최근 것이 사라지면 상한이 함정이 된다.
+[결정] **프레임 전문을 구간으로 해부한다(XgtFrameAnatomy).** 진단용 읽기 전용 분석기로,
+  무엇을 받아도 예외를 던지지 않는다 — 깨진 프레임일수록 봐야 할 이유가 큰데 분석기가 죽으면 볼 수 없다.
+  해석하지 못한 바이트는 버리지 않고 미해석 구간으로 남긴다. 구간들은 **빈틈·겹침 없이 프레임 전체를
+  덮는다**(테스트로 고정) — 빈틈이 있으면 그 바이트를 눌러도 아무 일이 안 일어나 진단이 막힌다.
+[결정] 남은 바이트 구간은 cursor 가 아니라 **마지막으로 붙인 구간의 끝**을 기준으로 덧붙인다.
+  중간에 잘린 블록을 이미 기록한 경우 cursor 기준이면 같은 자리에 두 번 붙어 겹친다.
+[결정] 주소를 누르면 **값 > 이름** 순으로 고른다. 주소 하나는 보통 이름 길이·변수명·값 세 구간에
+  걸리는데, 쓰기라면 값을 보고 싶은 것이 보통이다.
+[결정] 바이트마다 자기 구간 번호를 미리 붙여 둔다 — 클릭할 때마다 찾으면 프레임이 길수록 느려진다.
+[버그 수정] 구간 색이 안 보였다. Fluent 는 Button 배경을 ContentPresenter 에 그리므로
+  Button 에 Background 를 주면 프리젠터가 덮는다. 색을 프리젠터에 직접 준다.
+  (M15 의 ledToggle 흰 글자와 같은 부류 — 스크린샷 검토로 또 잡았다.)
+[결정] 트래픽 스크린샷을 **실제 XGT 세션**으로 바꿨다. 합성 코덱으로 찍으면 해부 패널이
+  "잘린 헤더"만 보여 주어 화면이 무엇을 해 주는지 나타내지 못한다. README 의 합성 코덱 주의문도 삭제.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요)

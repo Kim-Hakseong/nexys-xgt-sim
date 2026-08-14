@@ -71,6 +71,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private TrafficRowViewModel? _selectedTrafficRow;
 
+    /// <summary>
+    /// 참이면 최근 것이 위로 쌓인다. 기본값 — 방금 오간 프레임이 눈앞에 있어야 한다.
+    /// </summary>
+    [ObservableProperty]
+    private bool _newestTrafficFirst = true;
+
+    /// <summary>전문에서 고른 구간 — 이 구간의 바이트가 블록으로 잡힌다.</summary>
+    [ObservableProperty]
+    private FrameFieldViewModel? _selectedFrameField;
+
     [ObservableProperty]
     private string _bindAddressText = "0.0.0.0";
 
@@ -774,8 +784,148 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>고른 행의 전문 표시 여부.</summary>
     public bool HasSelectedTrafficRow => SelectedTrafficRow is not null;
 
+    /// <summary>고른 행의 프레임을 쪼갠 구간들.</summary>
+    public ObservableCollection<FrameFieldViewModel> FrameFields { get; } = [];
+
+    /// <summary>고른 행의 프레임 바이트 칸들.</summary>
+    public ObservableCollection<FrameByteViewModel> FrameBytes { get; } = [];
+
+    /// <summary>전문 안에서 클릭할 수 있는 주소들.</summary>
+    public ObservableCollection<string> FrameAddresses { get; } = [];
+
+    /// <summary>정렬 버튼 문구.</summary>
+    public string TrafficSortLabel => NewestTrafficFirst ? "최근 ↑ 위로" : "최근 ↓ 아래로";
+
+    /// <summary>고른 구간 설명 — 무엇을 블록으로 잡았는지.</summary>
+    public string SelectedFrameFieldText => SelectedFrameField is null
+        ? "구간이나 주소를 누르면 전문에서 그 자리가 잡힙니다."
+        : $"{SelectedFrameField.Name} · 바이트 {SelectedFrameField.RangeText}"
+            + (SelectedFrameField.Value.Length > 0 ? $" · {SelectedFrameField.Value}" : string.Empty);
+
+    /// <summary>정렬 방향을 뒤집는다.</summary>
+    [RelayCommand]
+    private void ToggleTrafficSort()
+    {
+        NewestTrafficFirst = !NewestTrafficFirst;
+        RefreshTraffic();
+    }
+
+    /// <summary>전문에서 한 구간을 고른다(구간 목록 클릭).</summary>
+    [RelayCommand]
+    private void SelectFrameField(FrameFieldViewModel? field) => ApplyFrameSelection(field);
+
+    /// <summary>바이트 칸을 눌러 그 바이트가 속한 구간을 고른다.</summary>
+    [RelayCommand]
+    private void SelectFrameByte(FrameByteViewModel? cell)
+    {
+        if (cell is null || cell.FieldIndex < 0 || cell.FieldIndex >= FrameFields.Count)
+        {
+            return;
+        }
+
+        ApplyFrameSelection(FrameFields[cell.FieldIndex]);
+    }
+
+    /// <summary>
+    /// 주소를 눌러 그 주소가 쓰인 자리를 잡는다 — 이름 구간이 있으면 그쪽을 우선한다.
+    /// </summary>
+    /// <remarks>
+    /// 주소 하나는 보통 두 구간(이름 길이 + 변수명)에, 쓰기라면 값 구간까지 걸린다.
+    /// 값이 있으면 값을 보고 싶은 것이 보통이므로 값 &gt; 이름 순으로 고른다.
+    /// </remarks>
+    [RelayCommand]
+    private void SelectFrameAddress(string? address)
+    {
+        if (address is null)
+        {
+            return;
+        }
+
+        var matches = FrameFields
+            .Where(f => f.Address is not null
+                && string.Equals(f.Address, address, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var chosen = matches.FirstOrDefault(f => f.IsValue)
+            ?? matches.FirstOrDefault(f => f.IsName)
+            ?? matches.FirstOrDefault();
+
+        ApplyFrameSelection(chosen);
+    }
+
+    private void ApplyFrameSelection(FrameFieldViewModel? field)
+    {
+        foreach (var candidate in FrameFields)
+        {
+            candidate.IsSelected = ReferenceEquals(candidate, field);
+        }
+
+        SelectedFrameField = field;
+
+        foreach (var cell in FrameBytes)
+        {
+            cell.IsHighlighted = field is not null && cell.FieldIndex == field.Index;
+        }
+
+        OnPropertyChanged(nameof(SelectedFrameFieldText));
+    }
+
+    /// <summary>고른 행의 프레임을 다시 해부한다.</summary>
+    private void RebuildFrameAnatomy(TrafficRowViewModel? row)
+    {
+        FrameFields.Clear();
+        FrameBytes.Clear();
+        FrameAddresses.Clear();
+        SelectedFrameField = null;
+
+        var raw = row?.Source.Raw ?? [];
+        if (raw.Length == 0)
+        {
+            OnPropertyChanged(nameof(SelectedFrameFieldText));
+            return;
+        }
+
+        var fields = XgtFrameAnatomy.Describe(raw);
+        for (var i = 0; i < fields.Count; i++)
+        {
+            FrameFields.Add(new FrameFieldViewModel(fields[i], i));
+        }
+
+        // 바이트마다 자기 구간을 미리 붙여 둔다 — 클릭할 때마다 찾으면 프레임이 길수록 느려진다.
+        var fieldIndex = 0;
+        for (var offset = 0; offset < raw.Length; offset++)
+        {
+            while (fieldIndex < fields.Count && offset >= fields[fieldIndex].End)
+            {
+                fieldIndex++;
+            }
+
+            var inside = fieldIndex < fields.Count && fields[fieldIndex].Contains(offset);
+            FrameBytes.Add(new FrameByteViewModel(
+                offset, raw[offset],
+                inside ? fieldIndex : -1,
+                inside ? fields[fieldIndex].Kind : FrameFieldKind.Unknown));
+        }
+
+        foreach (var address in fields
+            .Select(f => f.Address)
+            .Where(a => a is not null)
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            FrameAddresses.Add(address!);
+        }
+
+        OnPropertyChanged(nameof(SelectedFrameFieldText));
+    }
+
     partial void OnSelectedTrafficRowChanged(TrafficRowViewModel? value)
-        => OnPropertyChanged(nameof(HasSelectedTrafficRow));
+    {
+        OnPropertyChanged(nameof(HasSelectedTrafficRow));
+        RebuildFrameAnatomy(value);
+    }
+
+    partial void OnNewestTrafficFirstChanged(bool value)
+        => OnPropertyChanged(nameof(TrafficSortLabel));
 
     partial void OnSelectedDirectionOptionChanged(DisplayOption<TrafficDirectionFilter> value)
         => RefreshTraffic();
@@ -889,7 +1039,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // 로그는 링 버퍼이므로 전체 스냅샷을 다시 투사한다 — 표시 상한을 두어 UI 부담을 막는다.
         const int displayLimit = 500;
         var events = _trafficLog.Snapshot(CurrentTrafficFilter);
-        var visible = events.Count > displayLimit ? events.Skip(events.Count - displayLimit) : events;
+        // 상한은 항상 **최근** 쪽을 남긴다 — 오래된 것을 보여 주고 최근을 버리면 쓸모가 없다.
+        IEnumerable<TrafficEvent> visible =
+            events.Count > displayLimit ? events.Skip(events.Count - displayLimit) : events;
+
+        if (NewestTrafficFirst)
+        {
+            visible = visible.Reverse();
+        }
 
         // 200ms 주기 갱신이 선택을 놓으면 전문을 읽는 도중에 패널이 닫힌다 —
         // 같은 사건이 여전히 목록에 있으면 선택을 되살린다.

@@ -412,7 +412,6 @@
   
   <!-- 범위 보기 칸 — 방금 바뀐 칸이 눈에 띄어야 마스터의 쓰기 위치를 찾을 수 있다 -->
   <Style Selector="Border.rangeCell">
-    <Setter Property="Width" Value="118" />
     <Setter Property="Padding" Value="8,5" />
     <Setter Property="Margin" Value="0,0,6,6" />
     <Setter Property="CornerRadius" Value="6" />
@@ -430,6 +429,101 @@
     <Setter Property="Padding" Value="0" />
     <Setter Property="Margin" Value="0" />
     <Setter Property="MinHeight" Value="0" />
+  </Style>
+
+  <!-- 프레임 전문: 바이트 격자 · 구간 목록 · 주소 칩 -->
+  <!--
+    Fluent 는 Button 의 배경을 ContentPresenter 에 그린다 — Button 자체에 Background 를 주면
+    프리젠터가 그 위를 덮어 색이 보이지 않는다. 그래서 구간 색은 프리젠터에 직접 준다.
+  -->
+  <Style Selector="Button.frameByte">
+    <Setter Property="Width" Value="30" />
+    <Setter Property="Height" Value="22" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Margin" Value="0,0,2,2" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+  </Style>
+
+  <Style Selector="Button.frameByte /template/ ContentPresenter">
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Background" Value="{StaticResource CardSoftBrush}" />
+  </Style>
+
+  <Style Selector="Button.frameByte.header /template/ ContentPresenter">
+    <Setter Property="Background" Value="#DDE3F0" />
+  </Style>
+
+  <Style Selector="Button.frameByte.name /template/ ContentPresenter">
+    <Setter Property="Background" Value="#CFE6D6" />
+  </Style>
+
+  <Style Selector="Button.frameByte.value /template/ ContentPresenter">
+    <Setter Property="Background" Value="#F5DFC4" />
+  </Style>
+
+  <Style Selector="Button.frameByte.unknown /template/ ContentPresenter">
+    <Setter Property="Background" Value="#EFD9D9" />
+  </Style>
+
+  <Style Selector="Button.frameByte.picked /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+
+  <Style Selector="Button.frameByte.picked">
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+
+  <Style Selector="Button.frameField">
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="Margin" Value="0,0,0,2" />
+    <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+  </Style>
+
+  <Style Selector="Button.frameField /template/ ContentPresenter">
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.frameField.header /template/ ContentPresenter">
+    <Setter Property="Background" Value="#DDE3F0" />
+  </Style>
+
+  <Style Selector="Button.frameField.name /template/ ContentPresenter">
+    <Setter Property="Background" Value="#CFE6D6" />
+  </Style>
+
+  <Style Selector="Button.frameField.value /template/ ContentPresenter">
+    <Setter Property="Background" Value="#F5DFC4" />
+  </Style>
+
+  <Style Selector="Button.frameField.unknown /template/ ContentPresenter">
+    <Setter Property="Background" Value="#EFD9D9" />
+  </Style>
+
+  <Style Selector="Button.frameField.picked /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+
+  <Style Selector="Button.frameChip">
+    <Setter Property="Padding" Value="8,2" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+
+  <Style Selector="Button.frameChip /template/ ContentPresenter">
+    <Setter Property="CornerRadius" Value="10" />
   </Style>
 </Application.Styles>
 </Application>

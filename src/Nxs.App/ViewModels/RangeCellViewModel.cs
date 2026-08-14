@@ -65,6 +65,32 @@ public sealed partial class RangeCellViewModel : ObservableObject
     /// <summary>바이트 순서.</summary>
     public ByteOrder Order { get; }
 
+    /// <summary>
+    /// 칸 너비(px). 형식·폭이 만들 수 있는 **가장 긴 표기**에 맞춰 정한다.
+    /// </summary>
+    /// <remarks>
+    /// 고정 너비로 두면 2진 워드(<c>0000 0100 1101 0010</c>)처럼 긴 표기가 잘린다.
+    /// 값에 따라 매번 재는 방식은 값이 바뀔 때마다 칸이 들썩여 읽기 어렵다 —
+    /// 그래서 값이 아니라 **형식이 낼 수 있는 최대 길이**로 한 번만 정한다.
+    /// </remarks>
+    public double CellWidth => WidthFor(Format, Address);
+
+    /// <summary>칸 너비를 계산한다(형식·주소 폭이 같으면 같은 값).</summary>
+    public static double WidthFor(WatchFormat format, IecAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+
+        // 글꼴을 재지 않고 글자 수로 정한다 — 결정적이고 테스트할 수 있다.
+        const double ValueCharWidth = 7.4;    // Consolas 12px
+        const double AddressCharWidth = 6.2;  // Consolas 10px
+        const double Padding = 20;
+
+        var valueChars = WatchValue.MaxRenderedLength(format, address.ByteLength);
+        var width = Math.Max(valueChars * ValueCharWidth, address.Text.Length * AddressCharWidth);
+        // 상한은 최악의 경우(LWORD 2진 = 79글자)도 담을 만큼 둔다 — 자르면 화면이 쓸모없어진다.
+        return Math.Clamp(Math.Ceiling(width + Padding), 96, 640);
+    }
+
     /// <summary>메모리를 다시 읽어 표시를 맞춘다.</summary>
     /// <remarks>
     /// 값이 그대로면 아무 속성도 건드리지 않는다 — 칸이 수천 개라 무조건 알림을 내면 UI 가 버겁다.

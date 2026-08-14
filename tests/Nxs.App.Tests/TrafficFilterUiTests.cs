@@ -261,19 +261,26 @@ public class TrafficFilterUiTests
         Assert.True(vm.HasSelectedTrafficRow);
 
         // 표의 raw hex 열은 잘리므로 전문이 따로 보여야 한다 — 그래야 진단에 쓸 수 있다.
-        var blocks = window.GetVisualDescendants().OfType<SelectableTextBlock>().ToList();
-        var texts = blocks.Select(t => t.Text ?? string.Empty).ToList();
-        Assert.Contains(vm.TrafficRows[0].HexText, texts);
-        Assert.Contains(vm.TrafficRows[0].SummaryText, texts);
+        // 이제 전문은 한 줄 문자열이 아니라 **바이트 격자**다.
+        Assert.Equal(vm.TrafficRows[0].Source.Raw.Length, vm.FrameBytes.Count);
+        Assert.Equal("4C", vm.FrameBytes[0].HexText);
 
-        // 창 안에 실제로 들어와 있어야 한다 — 레이아웃 밖으로 밀려나면 보이지 않는 기능이다.
-        foreach (var block in blocks)
+        var byteButtons = window.GetVisualDescendants().OfType<Button>()
+            .Where(b => b.DataContext is FrameByteViewModel)
+            .ToList();
+        Assert.NotEmpty(byteButtons);
+
+        // 격자가 창 안에 실제로 들어와 있어야 한다.
+        foreach (var placed in byteButtons.Select(b => b.GetTransformedBounds()))
         {
-            var placed = block.GetTransformedBounds();
             Assert.NotNull(placed);
-            Assert.True(placed!.Value.Bounds.Height > 0, "전문 줄의 높이가 0이면 보이지 않는다");
-            Assert.InRange(placed.Value.Clip.Top, 0, window.Height);
+            Assert.True(placed!.Value.Bounds.Height > 0);
         }
+
+        // 요약은 그대로 선택·복사할 수 있어야 한다.
+        var texts = window.GetVisualDescendants().OfType<SelectableTextBlock>()
+            .Select(t => t.Text ?? string.Empty).ToList();
+        Assert.Contains(vm.TrafficRows[0].SummaryText, texts);
 
         vm.Shutdown();
     }

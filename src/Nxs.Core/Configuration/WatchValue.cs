@@ -382,6 +382,50 @@ public static class WatchValue
         }
     }
 
+    /// <summary>
+    /// 이 형식·폭이 만들어 낼 수 있는 표기의 **최대 글자 수**.
+    /// </summary>
+    /// <remarks>
+    /// 범위 보기가 칸 너비를 정할 때 쓴다. 글꼴을 재지 않고 글자 수로 정하므로 결정적이고,
+    /// 값이 바뀌어도 칸 크기가 흔들리지 않는다 — 2진 워드(<c>0000 0100 1101 0010</c>)처럼
+    /// 긴 표기가 잘리던 문제를 이 값으로 막는다.
+    /// </remarks>
+    public static int MaxRenderedLength(WatchFormat format, int byteLength)
+    {
+        if (byteLength <= 0)
+        {
+            return 0;
+        }
+
+        return format switch
+        {
+            // "R" 표기는 지수부까지 나올 수 있다 — 실측 최악값에 여유를 둔다.
+            WatchFormat.Float => 15,
+            WatchFormat.Double => 24,
+            WatchFormat.Bool => 3,
+            WatchFormat.Hex => 2 + (byteLength * 2),
+
+            // 바이트마다 8비트 + 4비트마다 공백 하나(마지막 제외).
+            WatchFormat.Binary => (byteLength * 8) + (byteLength * 2) - 1,
+
+            // 부호 있는 10진은 부호 한 자리가 더 붙는다.
+            WatchFormat.Signed => DecimalDigits(byteLength) + 1,
+            _ => DecimalDigits(byteLength),
+        };
+    }
+
+    /// <summary>지정 폭의 부호 없는 최대값이 갖는 자릿수.</summary>
+    private static int DecimalDigits(int byteLength)
+    {
+        if (byteLength >= 8)
+        {
+            return 20;   // ulong.MaxValue
+        }
+
+        var max = (1UL << (byteLength * 8)) - 1;
+        return max.ToString(CultureInfo.InvariantCulture).Length;
+    }
+
     /// <summary>이 형식이 지정 폭에서 쓸 수 있는지.</summary>
     public static bool SupportsWidth(WatchFormat format, int byteLength) => format switch
     {

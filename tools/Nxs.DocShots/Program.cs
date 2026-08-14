@@ -111,9 +111,13 @@ public static class Program
     }
 
     /// <summary>
-    /// 트래픽 로그 탭은 실제 왕복이 있어야 의미가 있으므로 **합성 코덱**으로 서버를 띄워 찍는다.
-    /// 표시되는 hex 는 TestOnlyFrameCodec 의 합성 포맷이며 **XGT 프레임이 아니다** — README 캡션에 명시한다.
+    /// 트래픽 로그 탭은 실제 왕복이 있어야 의미가 있으므로 서버를 띄우고 **진짜 XGT 프레임**을 주고받는다.
     /// </summary>
+    /// <remarks>
+    /// 예전에는 합성 코덱으로 찍었는데, 프레임 해부 패널이 생긴 뒤로는 그러면 안 된다 —
+    /// XGT 가 아닌 바이트열을 해부해 봐야 "잘린 헤더"만 나오고, 화면이 실제로 무엇을 해 주는지
+    /// 보여 주지 못한다.
+    /// </remarks>
     private static bool RenderTrafficLog(string outputDirectory)
     {
         var project = NxpProject.CreateDefault(port: 0) with
@@ -123,7 +127,7 @@ public static class Program
 
         var viewModel = new MainWindowViewModel(
             project,
-            memory => new Nxs.TestKit.TestOnlyFrameCodec(new Core.Protocol.PlcRequestExecutor(memory)));
+            memory => new Core.Protocol.Xgt.XgtFenetCodec(new Core.Protocol.PlcRequestExecutor(memory)));
 
         var window = new MainWindow { DataContext = viewModel, Width = 1240, Height = 860 };
         window.Show();
@@ -139,13 +143,16 @@ public static class Program
 
             Task.Run(async () =>
             {
-                await using var client = await Nxs.TestKit.PlcTestClient.ConnectAsync("127.0.0.1", port);
-                await client.ReadIndividualAsync("%MW10");
-                await client.ReadContinuousAsync("%MW0", 6);
-                await client.WriteIndividualAsync(("%QX1024", [0x01]));
-                await client.ReadIndividualAsync("%IX512", "%IX513");
+                using var tcp = new System.Net.Sockets.TcpClient();
+                await tcp.ConnectAsync("127.0.0.1", port);
+                tcp.NoDelay = true;
+                var stream = tcp.GetStream();
+
+                await ExchangeAsync(stream, XgtReadIndividual("%MD310", "%MD311", "%MD312"));
+                await ExchangeAsync(stream, XgtWriteIndividual("%MW10", [0x34, 0x12]));
+                await ExchangeAsync(stream, XgtReadIndividual("%MW10"));
                 // 거절 사례 하나 — 오류 행이 ErrorBrush 로 보이는 것을 함께 보여준다.
-                await client.ReadContinuousAsync("%MB65530", 16);
+                await ExchangeAsync(stream, XgtReadIndividual("%MW99999"));
             }).GetAwaiter().GetResult();
 
             viewModel.Engine.StopServerAsync().GetAwaiter().GetResult();
@@ -166,7 +173,17 @@ public static class Program
 
         // 거절된 행을 골라 전문 패널이 어떻게 보이는지 함께 담는다 — 진단 흐름의 핵심이다.
         viewModel.SelectedTrafficRow =
-            viewModel.TrafficRows.LastOrDefault(r => r.IsError) ?? viewModel.TrafficRows.LastOrDefault();
+            viewModel.TrafficRows.FirstOrDefault(
+                r => r.SummaryText.Contains("개별 읽기 3블록", StringComparison.Ordinal))
+            ?? viewModel.TrafficRows.FirstOrDefault(r => r.AddressText.Length > 0);
+        Settle(window);
+
+        // 주소 하나를 골라 전문에서 블록이 잡힌 모습을 함께 담는다.
+        if (viewModel.FrameAddresses.Count > 0)
+        {
+            viewModel.SelectFrameAddressCommand.Execute(viewModel.FrameAddresses[^1]);
+        }
+
         Settle(window);
 
         var path = Path.Combine(outputDirectory, "05-traffic-log.png");
@@ -179,12 +196,94 @@ public static class Program
         }
 
         frame.Save(path);
-        Console.WriteLine($"05-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
+        Console.WriteLine($"05-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 실제 XGT 세션)");
         viewModel.Shutdown();
         return true;
     }
 
     /// <summary>레이아웃·바인딩·렌더가 안정될 때까지 UI 작업 큐를 비운다.</summary>
+    private static byte[] U16(ushort v) => [(byte)(v & 0xFF), (byte)(v >> 8)];
+
+    /// <summary>XGT 애플리케이션 헤더로 감싼다.</summary>
+    private static byte[] XgtFrame(byte[] data)
+    {
+        var frame = new byte[20 + data.Length];
+        System.Text.Encoding.ASCII.GetBytes("LSIS-XGT").CopyTo(frame, 0);
+        frame[12] = 0xA4;
+        frame[13] = 0x33;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(14), 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+            frame.AsSpan(16), (ushort)data.Length);
+        byte sum = 0;
+        for (var i = 0; i < 19; i++)
+        {
+            sum += frame[i];
+        }
+
+        frame[19] = sum;
+        data.CopyTo(frame, 20);
+        return frame;
+    }
+
+    private static byte[] XgtReadIndividual(params string[] names)
+    {
+        var b = new List<byte>();
+        b.AddRange(U16(0x0054));
+        b.AddRange(U16(0x0002));
+        b.AddRange(U16(0));
+        b.AddRange(U16((ushort)names.Length));
+        foreach (var n in names)
+        {
+            var a = System.Text.Encoding.ASCII.GetBytes(n);
+            b.AddRange(U16((ushort)a.Length));
+            b.AddRange(a);
+        }
+
+        return XgtFrame(b.ToArray());
+    }
+
+    private static byte[] XgtWriteIndividual(string name, byte[] value)
+    {
+        var b = new List<byte>();
+        b.AddRange(U16(0x0058));
+        b.AddRange(U16(0x0002));
+        b.AddRange(U16(0));
+        b.AddRange(U16(1));
+        var a = System.Text.Encoding.ASCII.GetBytes(name);
+        b.AddRange(U16((ushort)a.Length));
+        b.AddRange(a);
+        b.AddRange(U16((ushort)value.Length));
+        b.AddRange(value);
+        return XgtFrame(b.ToArray());
+    }
+
+    /// <summary>프레임 하나를 보내고 응답을 완독한다.</summary>
+    private static async Task ExchangeAsync(System.Net.Sockets.NetworkStream stream, byte[] frame)
+    {
+        await stream.WriteAsync(frame);
+
+        var header = new byte[20];
+        await ReadExactlyAsync(stream, header);
+        var body = new byte[
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(16))];
+        await ReadExactlyAsync(stream, body);
+    }
+
+    private static async Task ReadExactlyAsync(System.Net.Sockets.NetworkStream stream, byte[] buffer)
+    {
+        var read = 0;
+        while (read < buffer.Length)
+        {
+            var n = await stream.ReadAsync(buffer.AsMemory(read));
+            if (n == 0)
+            {
+                throw new IOException("응답 완독 전에 연결이 닫혔습니다");
+            }
+
+            read += n;
+        }
+    }
+
     private static void Settle(Window window)
     {
         for (var i = 0; i < 6; i++)
@@ -312,6 +411,8 @@ public static class Program
                 Core.Memory.IecAddress.Parse($"%MW{i}"), (uint)(0x1000 + (i * 13)));
         }
 
+        viewModel.RangeFormatOption =
+            viewModel.RangeFormatOptions.Single(o => o.Value == Core.Configuration.WatchFormat.Binary);
         viewModel.RangeStartAddress = "%MW0";
         viewModel.RangeCountText = "100";
         viewModel.ExpandRangeCommand.Execute(null);
