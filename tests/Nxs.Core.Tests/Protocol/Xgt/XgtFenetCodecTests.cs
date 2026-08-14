@@ -744,4 +744,98 @@ public class XgtFenetCodecTests
     [Fact]
     public void DefaultPortIsTwoThousandAndFour()
         => Assert.Equal(2004, XgtFenetOptions.DefaultPort);
+
+    // ==================== 현장 재현: 이름 폭 ≠ 값 길이 (2026-08-14) ====================
+    //
+    // 현장 트래픽 로그에서 잡은 실패:
+    //   "개별 쓰기 1블록: %MW000=02 00 00 00"  ·  사유 DataSizeMismatch
+    // 프레임 해석은 성공했고 **실행기**가 거절하고 있었다 — 이름 %MW000 은 2바이트인데
+    // 마스터가 4바이트를 보냈기 때문이다. 마스터는 데이터 타입으로 폭을 정하고 이름은
+    // 시작 위치로만 쓴다. 이름을 근거로 거절하면 보낸 데이터가 통째로 버려진다.
+
+    [Fact]
+    public void FieldCapture_WriteWhoseValueIsWiderThanTheNameIsApplied()
+    {
+        var (codec, memory) = NewCodec();
+
+        // 이름은 %MW000(2바이트), 값은 DWORD 4바이트 — 현장에서 실패하던 그 모양.
+        var exchange = codec.Handle(Frame(
+            WriteWithoutSizeField(0x0003, ("%MW000", [0x02, 0x00, 0x00, 0x00]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+
+        // %MW000 과 %MW001 두 워드에 걸쳐 그대로 들어가야 한다.
+        Assert.Equal(2u, memory.ReadScalar(IecAddress.Parse("%MW0")));
+        Assert.Equal(0u, memory.ReadScalar(IecAddress.Parse("%MW1")));
+    }
+
+    [Fact]
+    public void FieldCapture_TheSameWriteWithASizeFieldAlsoWorks()
+    {
+        var (codec, memory) = NewCodec();
+
+        var exchange = codec.Handle(Frame(
+            WriteIndividualData(0x0003, ("%MW000", [0x02, 0x00, 0x00, 0x00]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+        Assert.Equal(2u, memory.ReadScalar(IecAddress.Parse("%MW0")));
+    }
+
+    [Theory]
+    [InlineData("%MW000")]
+    [InlineData("%MW001")]
+    [InlineData("%MW0")]
+    [InlineData("%MW1")]
+    public void FieldCapture_LeadingZeroFormsAllAcceptTheWiderWrite(string name)
+    {
+        var (codec, _) = NewCodec();
+
+        var exchange = codec.Handle(Frame(
+            WriteWithoutSizeField(0x0003, (name, [0x11, 0x22, 0x33, 0x44]))));
+
+        Assert.Equal(PlcErrorReason.None, exchange.Reason);
+    }
+
+    [Fact]
+    public void WriteWiderThanTheNameStillStopsAtTheEndOfMemory()
+    {
+        var (codec, _) = NewCodec();
+
+        // 메모리 밖에서 4바이트를 쓰려 하면 범위를 벗어난다 — 이건 여전히 거절이다.
+        var exchange = codec.Handle(Frame(
+            WriteWithoutSizeField(0x0003, ("%MW99999", [0x11, 0x22, 0x33, 0x44]))));
+
+        Assert.Equal(PlcErrorReason.RangeExceeded, exchange.Reason);
+
+        // 거절 한 줄만 보고 원인을 알 수 있어야 한다 — 숫자가 들어 있어야 한다.
+        Assert.Contains("4바이트", exchange.ResponseSummary, StringComparison.Ordinal);
+        Assert.Contains("%MW99999", exchange.ResponseSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BitWriteStillRequiresExactlyOneByte()
+    {
+        var (codec, _) = NewCodec();
+
+        // 비트에 여러 바이트를 얹을 방법은 없다 — 여기까지 느슨해지면 안 된다.
+        var exchange = codec.Handle(Frame(
+            WriteWithoutSizeField(0x0002, ("%MX800", [0x01, 0x00]))));
+
+        Assert.Equal(PlcErrorReason.DataSizeMismatch, exchange.Reason);
+        Assert.Contains("비트", exchange.ResponseSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RejectionSummaryCarriesTheNumbersNeededToDiagnoseIt()
+    {
+        var (codec, _) = NewCodec();
+
+        var exchange = codec.Handle(Frame(ReadIndividualData(0x0002, "%MW99999")));
+
+        // 사유 열거형만으로는 현장에서 진단이 안 된다 — 무엇이 왜 안 맞는지 적혀 있어야 한다.
+        Assert.Equal(PlcErrorReason.RangeExceeded, exchange.Reason);
+        Assert.Contains("RangeExceeded", exchange.ResponseSummary, StringComparison.Ordinal);
+        Assert.Contains("%MW99999", exchange.ResponseSummary, StringComparison.Ordinal);
+        Assert.Contains("범위", exchange.ResponseSummary, StringComparison.Ordinal);
+    }
 }

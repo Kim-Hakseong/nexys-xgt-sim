@@ -136,12 +136,28 @@ public class PlcRequestExecutorTests
     }
 
     [Fact]
-    public void WriteWithWrongValueLengthIsRejectedWithDataSizeMismatch()
+    public void WriteLengthComesFromTheFrameNotFromTheNameWidth()
+    {
+        var (exec, mem) = New();
+
+        // 2026-08-14 현장 로그 이후 바뀐 규칙: 이름은 시작 위치만 정하고 길이는 온 바이트 수가 정한다.
+        // 예전에는 이 요청을 DataSizeMismatch 로 거절했는데, 그 때문에 마스터가 보낸 데이터가
+        // 통째로 버려졌다(이름 %MW000 + 4바이트 값이 현장에서 실패하던 모양).
+        var res = exec.Execute(new WriteIndividualRequest([
+            new PlcWriteItem(IecAddress.Parse("%MW0"), new byte[] { 0x01 }),
+        ]));
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal(1u, mem.ReadScalar(IecAddress.Parse("%MW0")));
+    }
+
+    [Fact]
+    public void WriteWithAnEmptyValueIsStillRejectedWithDataSizeMismatch()
     {
         var (exec, mem) = New();
 
         var res = exec.Execute(new WriteIndividualRequest([
-            new PlcWriteItem(IecAddress.Parse("%MW0"), new byte[] { 0x01 }),
+            new PlcWriteItem(IecAddress.Parse("%MW0"), []),
         ]));
 
         Assert.False(res.IsSuccess);

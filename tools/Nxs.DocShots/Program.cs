@@ -1,3 +1,4 @@
+using Avalonia.VisualTree;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -160,6 +161,11 @@ public static class Program
 
         var tabControl = window.GetLogicalDescendants().OfType<TabControl>().First();
         tabControl.SelectedIndex = 3;
+        Settle(window);
+
+        // 거절된 행을 골라 전문 패널이 어떻게 보이는지 함께 담는다 — 진단 흐름의 핵심이다.
+        viewModel.SelectedTrafficRow =
+            viewModel.TrafficRows.LastOrDefault(r => r.IsError) ?? viewModel.TrafficRows.LastOrDefault();
         Settle(window);
 
         var path = Path.Combine(outputDirectory, "04-traffic-log.png");

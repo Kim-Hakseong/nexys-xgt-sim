@@ -369,9 +369,18 @@ public sealed class XgtFenetCodec : IFrameCodec
         }
 
         return Compose(header, data, requestSummary, response.Reason,
-            response.IsSuccess ? $"읽기 응답 · 블록 {blocks.Count}개" : $"거절 · {response.Reason}",
+            response.IsSuccess ? $"읽기 응답 · 블록 {blocks.Count}개" : RejectSummary(response),
             addresses);
     }
+
+    /// <summary>
+    /// 거절 한 줄. 실행기가 남긴 설명이 있으면 함께 적는다 —
+    /// 사유 열거형만 보고는 무엇이 왜 안 맞는지 알 수 없어 프레임을 다시 받아 봐야 했다.
+    /// </summary>
+    private static string RejectSummary(PlcResponse response)
+        => string.IsNullOrEmpty(response.Detail)
+            ? $"거절 · {response.Reason}"
+            : $"거절 · {response.Reason} — {response.Detail}";
 
     private FrameExchange BuildWriteResponse(
         XgtFenetHeader header, ushort dataType, PlcResponse response, string requestSummary,
@@ -385,7 +394,7 @@ public sealed class XgtFenetCodec : IFrameCodec
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(8), 0x0000);
 
         return Compose(header, data, requestSummary, response.Reason,
-            response.IsSuccess ? "쓰기 응답 · 정상" : $"거절 · {response.Reason}", addresses);
+            response.IsSuccess ? "쓰기 응답 · 정상" : RejectSummary(response), addresses);
     }
 
     private FrameExchange Reject(

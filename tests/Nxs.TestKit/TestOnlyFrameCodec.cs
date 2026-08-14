@@ -93,7 +93,9 @@ public sealed class TestOnlyFrameCodec : IFrameCodec
                 RequestSummary = summary,
                 ResponseSummary = response.IsSuccess
                     ? $"OK · 블록 {response.Blocks.Count}개"
-                    : $"거절 · {response.Reason}",
+                    : string.IsNullOrEmpty(response.Detail)
+                        ? $"거절 · {response.Reason}"
+                        : $"거절 · {response.Reason} — {response.Detail}",
                 Reason = response.Reason,
                 Addresses = AddressesOf(request),
             };

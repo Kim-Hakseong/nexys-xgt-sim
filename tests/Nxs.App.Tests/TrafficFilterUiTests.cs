@@ -237,6 +237,96 @@ public class TrafficFilterUiTests
     }
 
     [AvaloniaFact]
+    public void SelectingARowShowsItsFullFrameForDiagnosis()
+    {
+        var (vm, _) = Build();
+        var window = new MainWindow { DataContext = vm, Width = 1240, Height = 860 };
+        window.Show();
+
+        var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
+        tabControl.SelectedIndex = 3;
+        Dispatcher.UIThread.RunJobs();
+        window.Measure(new Avalonia.Size(window.Width, window.Height));
+        window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.HasSelectedTrafficRow);
+
+        vm.SelectedTrafficRow = vm.TrafficRows[0];
+        Dispatcher.UIThread.RunJobs();
+        window.Measure(new Avalonia.Size(window.Width, window.Height));
+        window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.HasSelectedTrafficRow);
+
+        // 표의 raw hex 열은 잘리므로 전문이 따로 보여야 한다 — 그래야 진단에 쓸 수 있다.
+        var blocks = window.GetVisualDescendants().OfType<SelectableTextBlock>().ToList();
+        var texts = blocks.Select(t => t.Text ?? string.Empty).ToList();
+        Assert.Contains(vm.TrafficRows[0].HexText, texts);
+        Assert.Contains(vm.TrafficRows[0].SummaryText, texts);
+
+        // 창 안에 실제로 들어와 있어야 한다 — 레이아웃 밖으로 밀려나면 보이지 않는 기능이다.
+        foreach (var block in blocks)
+        {
+            var placed = block.GetTransformedBounds();
+            Assert.NotNull(placed);
+            Assert.True(placed!.Value.Bounds.Height > 0, "전문 줄의 높이가 0이면 보이지 않는다");
+            Assert.InRange(placed.Value.Clip.Top, 0, window.Height);
+        }
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void RefreshKeepsTheSelectedRowSoThePanelDoesNotCloseWhileReading()
+    {
+        var (vm, _) = Build();
+        vm.SelectedTrafficRow = vm.TrafficRows[1];
+        var chosen = vm.TrafficRows[1].Source;
+
+        // 200ms 주기 갱신이 선택을 놓으면 전문을 읽는 도중에 패널이 닫힌다.
+        vm.RefreshTraffic();
+
+        Assert.NotNull(vm.SelectedTrafficRow);
+        Assert.Same(chosen, vm.SelectedTrafficRow!.Source);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
+    public void DetailHeaderNamesTheDirectionAddressAndReason()
+    {
+        var log = new TrafficLog();
+        log.Record(new TrafficEvent
+        {
+            Timestamp = DateTimeOffset.UnixEpoch,
+            Direction = TrafficDirection.Tx,
+            ClientId = "127.0.0.1:5000",
+            Raw = [0x00],
+            Summary = "거절 · DataSizeMismatch — %MW000 에 쓸 값이 비어 있습니다",
+            Reason = PlcErrorReason.DataSizeMismatch,
+            Addresses = ["%MW000"],
+        });
+
+        var vm = new MainWindowViewModel(
+            NxpProject.CreateDefault(port: 0) with
+            {
+                Server = new ServerSettings { BindAddress = "127.0.0.1", Port = 0 },
+            },
+            memory => new XgtFenetCodec(new PlcRequestExecutor(memory)),
+            log);
+        vm.RefreshTraffic();
+
+        var header = vm.TrafficRows[0].DetailHeaderText;
+        Assert.Contains("TX", header, StringComparison.Ordinal);
+        Assert.Contains("%MW000", header, StringComparison.Ordinal);
+        Assert.Contains("DataSizeMismatch", header, StringComparison.Ordinal);
+
+        vm.Shutdown();
+    }
+
+    [AvaloniaFact]
     public void TrafficTabRendersTheDirectionComboAndAddressChips()
     {
         var (vm, _) = Build();

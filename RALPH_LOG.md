@@ -601,3 +601,37 @@ Tests 545/545 (Core 325 + Integration 61 + App 159) · 빌드 경고0/에러0
 [결정] 저장된 형식이 주소 폭과 맞지 않으면(손으로 고친 .nxp 등) 예외 대신 폭에 맞는 첫 형식으로
   되돌린다 — 프로젝트 하나 때문에 앱이 열리지 않는 편이 더 나쁘다.
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요) · 랩뷰 쓰기 현장 재확인
+
+## M18 — 쓰기 길이는 이름이 아니라 프레임이 정한다 (현장 로그로 확정) · 2026-08-14
+Status ✅
+Files: src/Nxs.Core/Protocol/{PlcResponse,PlcRequestExecutor}.cs,
+  src/Nxs.Core/Protocol/Xgt/XgtFenetCodec.cs,
+  src/Nxs.App/ViewModels/{MainWindowViewModel,TrafficRowViewModel}.cs,
+  src/Nxs.App/Views/MainWindow.axaml, tests/Nxs.TestKit/TestOnlyFrameCodec.cs,
+  tools/Nxs.DocShots/Program.cs, README.md, spec/xgt-fenet-reference.md,
+  tests/Nxs.Core.Tests/Protocol/{WriteWidthFromFrameTests,PlcRequestExecutorTests}.cs,
+  tests/Nxs.Core.Tests/Protocol/Xgt/XgtFenetCodecTests.cs,
+  tests/Nxs.App.Tests/TrafficFilterUiTests.cs
+Tests 567/567 (Core 344 + Integration 61 + App 162) · 빌드 경고0/에러0
+
+[방법 변경] **이번에는 추측하지 않았다.** 사용자가 보낸 현장 트래픽 로그 한 줄에 답이 있었다:
+  "개별 쓰기 1블록: %MW000=02 00 00 00 · DataSizeMismatch".
+  이 요약은 **성공 경로의 문구**다 — 즉 프레임 해석은 통과했고 거절한 것은 코덱이 아니라 실행기였다.
+  M14·M16 에서 고친 것은 전부 코덱의 프레임 해석부였으니, 애초에 다른 곳을 보고 있었던 셈이다.
+[원인] 실행기가 `값 길이 == 이름의 폭` 을 요구했다. 이름 %MW000 은 2바이트인데 마스터는 4바이트를
+  보낸다 — 마스터는 데이터 타입으로 폭을 정하고 변수명은 시작 위치로만 쓴다.
+  (%MW000 에 4바이트 = %MW000 + %MW001. 사용자가 그 두 워드를 테스트 중이었다는 사실과 일치한다.)
+[결정] **시작 위치는 이름이, 길이는 실제 온 바이트 수가 정한다.** 이름 폭을 근거로 거절하면
+  마스터가 보낸 데이터가 통째로 버려진다. 메모리 범위만 확인하고 온 만큼 쓴다.
+  비트 주소는 예외로 남긴다 — 여러 바이트를 비트에 얹을 방법이 없다.
+[결정] **거절에 설명을 붙였다(PlcResponse.Detail).** 이번 왕복이 길어진 진짜 이유는
+  로그에 "DataSizeMismatch" 한 단어만 있어서 무엇과 무엇이 안 맞는지 알 수 없었다는 점이다.
+  판정한 쪽이 그 자리에서 숫자를 적으면 트래픽 로그 한 줄로 원인이 드러난다.
+  이제 "거절 · RangeExceeded — %MW99999 에서 4바이트 쓰기가 메모리 범위를 벗어납니다" 로 남는다.
+[결정] **트래픽 행을 고르면 프레임 전문이 펼쳐진다.** 표의 raw hex 열은 잘려서, 화면을 캡처해도
+  프레임을 읽을 수 없었다. 고른 행의 전문을 선택·복사 가능한 형태로 아래에 펼친다 —
+  다음 실패는 캡처 한 장으로 진단할 수 있어야 한다.
+  주기 갱신이 선택을 놓지 않도록 같은 사건을 다시 고른다(읽는 중에 패널이 닫히지 않게).
+[변경] 기존 테스트 WriteWithWrongValueLengthIsRejectedWithDataSizeMismatch 는 옛 규칙을 고정하고
+  있었다. 지우지 않고 새 규칙(WriteLengthComesFromTheFrameNotFromTheNameWidth)을 단언하도록 바꿨다.
+Next: spec §5 에러 코드 표 확정 (매뉴얼 필요) · 이번 수정의 현장 확인

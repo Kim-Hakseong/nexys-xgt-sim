@@ -33,6 +33,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _newTrafficAddress = string.Empty;
 
+    /// <summary>
+    /// 표에서 고른 트래픽 행. 표의 raw hex 열은 잘려 보이므로 고른 행의 전문을 따로 펼친다.
+    /// </summary>
+    /// <remarks>
+    /// 현장 실패를 진단하려면 프레임 전문이 필요한데, 잘린 열을 캡처해서는 알 수 없다.
+    /// 고른 행 하나만이라도 전문을 보이게 해 두면 그 자리에서 원인을 읽거나 그대로 전달할 수 있다.
+    /// </remarks>
+    [ObservableProperty]
+    private TrafficRowViewModel? _selectedTrafficRow;
+
     [ObservableProperty]
     private string _bindAddressText = "0.0.0.0";
 
@@ -578,6 +588,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>고른 행의 전문 표시 여부.</summary>
+    public bool HasSelectedTrafficRow => SelectedTrafficRow is not null;
+
+    partial void OnSelectedTrafficRowChanged(TrafficRowViewModel? value)
+        => OnPropertyChanged(nameof(HasSelectedTrafficRow));
+
     partial void OnSelectedDirectionOptionChanged(DisplayOption<TrafficDirectionFilter> value)
         => RefreshTraffic();
 
@@ -687,10 +703,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var events = _trafficLog.Snapshot(CurrentTrafficFilter);
         var visible = events.Count > displayLimit ? events.Skip(events.Count - displayLimit) : events;
 
+        // 200ms 주기 갱신이 선택을 놓으면 전문을 읽는 도중에 패널이 닫힌다 —
+        // 같은 사건이 여전히 목록에 있으면 선택을 되살린다.
+        var selected = SelectedTrafficRow?.Source;
+
         TrafficRows.Clear();
         foreach (var e in visible)
         {
             TrafficRows.Add(new TrafficRowViewModel(e));
+        }
+
+        if (selected is not null)
+        {
+            SelectedTrafficRow = TrafficRows.FirstOrDefault(r => ReferenceEquals(r.Source, selected));
         }
 
         OnPropertyChanged(nameof(TrafficSummary));
