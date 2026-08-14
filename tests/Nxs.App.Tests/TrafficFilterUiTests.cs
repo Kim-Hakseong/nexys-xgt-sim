@@ -244,7 +244,7 @@ public class TrafficFilterUiTests
         window.Show();
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
-        tabControl.SelectedIndex = 3;
+        tabControl.SelectedIndex = 4;
         Dispatcher.UIThread.RunJobs();
         window.Measure(new Avalonia.Size(window.Width, window.Height));
         window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));
@@ -337,7 +337,7 @@ public class TrafficFilterUiTests
         window.Show();
 
         var tabControl = window.GetVisualDescendants().OfType<TabControl>().Single();
-        tabControl.SelectedIndex = 3;   // 트래픽 로그
+        tabControl.SelectedIndex = 4;   // 트래픽 로그
         Dispatcher.UIThread.RunJobs();
         window.Measure(new Avalonia.Size(window.Width, window.Height));
         window.Arrange(new Avalonia.Rect(0, 0, window.Width, window.Height));

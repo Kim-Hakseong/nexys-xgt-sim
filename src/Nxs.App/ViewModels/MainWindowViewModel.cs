@@ -10,6 +10,7 @@ using Nxs.Core.Memory;
 using Nxs.Core.Protocol;
 using Nxs.Core.Protocol.Xgt;
 using Nxs.Core.Simulator;
+using Nxs.Core.Time;
 
 namespace Nxs.App.ViewModels;
 
@@ -19,6 +20,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly Func<PlcMemory, IFrameCodec>? _codecFactory;
     private readonly TrafficLog _trafficLog;
     private readonly FrameRecorder? _frameRecorder;
+    private readonly ITimeSource? _timeSource;
 
     [ObservableProperty]
     private bool _showErrorsOnly;
@@ -28,6 +30,32 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private DisplayOption<TrafficDirectionFilter> _selectedDirectionOption = null!;
+
+    /// <summary>범위 보기 시작 주소.</summary>
+    [ObservableProperty]
+    private string _rangeStartAddress = "%MW0";
+
+    /// <summary>범위 보기 개수 입력.</summary>
+    [ObservableProperty]
+    private string _rangeCountText = "100";
+
+    /// <summary>범위 보기 안내·오류 문구.</summary>
+    [ObservableProperty]
+    private string _rangeNotice = "시작 주소와 개수를 정하고 [펼치기] 를 누르세요.";
+
+    [ObservableProperty]
+    private DisplayOption<WatchFormat> _rangeFormatOption = null!;
+
+    [ObservableProperty]
+    private DisplayOption<ByteOrder> _rangeOrderOption = null!;
+
+    /// <summary>범위 보기에서 고른 칸 — 값을 직접 고쳐 쓸 수 있다.</summary>
+    [ObservableProperty]
+    private RangeCellViewModel? _selectedRangeCell;
+
+    /// <summary>고른 칸에 쓸 값.</summary>
+    [ObservableProperty]
+    private string _selectedRangeValueText = string.Empty;
 
     /// <summary>새 트래픽 주소 필터 입력값.</summary>
     [ObservableProperty]
@@ -66,16 +94,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </param>
     /// <param name="trafficLog">트래픽 로그. null이면 새로 만든다.</param>
     /// <param name="frameRecorder">수신 프레임 자동 캡처기.</param>
+    /// <param name="timeSource">시간 원천. 변경 표시가 꺼지는 시점을 테스트가 결정적으로 다룬다.</param>
     public MainWindowViewModel(
         NxpProject? project = null,
         Func<PlcMemory, IFrameCodec>? codecFactory = null,
         TrafficLog? trafficLog = null,
-        FrameRecorder? frameRecorder = null)
+        FrameRecorder? frameRecorder = null,
+        ITimeSource? timeSource = null)
     {
         _codecFactory = codecFactory;
+        _timeSource = timeSource;
         _trafficLog = trafficLog ?? new TrafficLog();
         _frameRecorder = frameRecorder;
         _selectedDirectionOption = DirectionOptions[0];
+        _rangeFormatOption = RangeFormatOptions.First(o => o.Value == WatchFormat.Hex);
+        _rangeOrderOption = RangeOrderOptions[0];
         LoadProject(project ?? NxpProject.CreateDefault(port: XgtFenetOptions.DefaultPort));
     }
 
@@ -180,6 +213,156 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasTrafficAddressFilter));
         RefreshTraffic();
         StatusMessage = "트래픽 주소 필터를 모두 지웠습니다.";
+    }
+
+    /// <summary>
+    /// 범위 보기 칸 — 시작 주소부터 개수만큼 펼친 주소들.
+    /// </summary>
+    /// <remarks>
+    /// 마스터가 어느 주소를 건드리는지 모를 때 하나씩 추가해 찾는 것은 현실적이지 않다.
+    /// 한 화면에 100개·1000개를 펼쳐 놓고 **방금 바뀐 칸**을 보면 바로 찾을 수 있다.
+    /// </remarks>
+    public ObservableCollection<RangeCellViewModel> RangeCells { get; } = [];
+
+    /// <summary>범위가 펼쳐져 있는지.</summary>
+    public bool HasRangeCells => RangeCells.Count > 0;
+
+    /// <summary>칸을 골랐는지 — 값 편집 패널 표시용.</summary>
+    public bool HasSelectedRangeCell => SelectedRangeCell is not null;
+
+    /// <summary>버튼으로 고르는 개수 후보.</summary>
+    public IReadOnlyList<int> RangeCountPresets { get; } = [10, 100, 300, 500, 1000];
+
+    /// <summary>범위 보기 표시 형식 후보.</summary>
+    public IReadOnlyList<DisplayOption<WatchFormat>> RangeFormatOptions { get; } =
+        new[]
+        {
+            WatchFormat.Decimal, WatchFormat.Signed, WatchFormat.Hex,
+            WatchFormat.Binary, WatchFormat.Bool, WatchFormat.Float, WatchFormat.Double,
+        }.Select(DisplayOptions.For).ToArray();
+
+    /// <summary>범위 보기 바이트 순서 후보.</summary>
+    public IReadOnlyList<DisplayOption<ByteOrder>> RangeOrderOptions { get; } =
+        new[] { ByteOrder.Dcba, ByteOrder.Abcd, ByteOrder.Badc, ByteOrder.Cdab }
+            .Select(DisplayOptions.For).ToArray();
+
+    /// <summary>개수를 버튼 하나로 정하고 바로 펼친다.</summary>
+    [RelayCommand]
+    private void UseRangeCount(int count)
+    {
+        RangeCountText = count.ToString(CultureInfo.InvariantCulture);
+        ExpandRange();
+    }
+
+    /// <summary>범위를 펼친다.</summary>
+    [RelayCommand]
+    private void ExpandRange()
+    {
+        ErrorMessage = null;
+        var start = AddressInput.Normalize(RangeStartAddress);
+
+        if (!int.TryParse(RangeCountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
+        {
+            RangeNotice = $"개수를 숫자로 넣어 주세요 (1 ~ {AddressRange.MaxCount})";
+            return;
+        }
+
+        IReadOnlyList<IecAddress> addresses;
+        try
+        {
+            addresses = AddressRange.Expand(start, count, memory: Engine.Memory);
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentOutOfRangeException
+            or InvalidOperationException)
+        {
+            RangeNotice = ex is FormatException
+                ? $"시작 주소를 해석할 수 없습니다 — {AddressInput.Describe(RangeStartAddress)}"
+                : ex.Message;
+            return;
+        }
+
+        RangeStartAddress = start;
+        SelectedRangeCell = null;
+        RangeCells.Clear();
+
+        var format = RangeFormatOption.Value;
+        var order = RangeOrderOption.Value;
+        foreach (var address in addresses)
+        {
+            RangeCells.Add(new RangeCellViewModel(Engine.Memory, address, format, order, Engine.TimeSource));
+        }
+
+        OnPropertyChanged(nameof(HasRangeCells));
+        RangeNotice = $"{addresses[0].Text} ~ {addresses[^1].Text} · {addresses.Count}개 "
+            + "— 마스터가 값을 바꾼 칸은 잠시 표시됩니다.";
+    }
+
+    /// <summary>범위 보기를 비운다.</summary>
+    [RelayCommand]
+    private void ClearRange()
+    {
+        SelectedRangeCell = null;
+        RangeCells.Clear();
+        OnPropertyChanged(nameof(HasRangeCells));
+        RangeNotice = "시작 주소와 개수를 정하고 [펼치기] 를 누르세요.";
+    }
+
+    /// <summary>고른 칸을 워치 목록에 넣는다 — 계속 지켜볼 주소를 옮기는 경로.</summary>
+    [RelayCommand]
+    private void AddSelectedRangeCellToWatch()
+    {
+        if (SelectedRangeCell is null)
+        {
+            return;
+        }
+
+        NewWatchAddress = SelectedRangeCell.AddressText;
+        NewWatchLabel = string.Empty;
+        AddWatchCommand.Execute(null);
+    }
+
+    /// <summary>고른 칸에 값을 쓴다.</summary>
+    [RelayCommand]
+    private void WriteSelectedRangeCell()
+    {
+        if (SelectedRangeCell is null)
+        {
+            return;
+        }
+
+        var cell = SelectedRangeCell;
+        var bytes = WatchValue.Parse(
+            SelectedRangeValueText, cell.Address.ByteLength, cell.Format, cell.Order);
+
+        if (bytes is null)
+        {
+            RangeNotice = $"{cell.AddressText} 에 쓸 값을 해석할 수 없습니다 "
+                + $"({RangeFormatOption.Label} 형식)";
+            return;
+        }
+
+        Engine.Memory.WriteRaw(cell.Address, bytes);
+        cell.Refresh();
+        RangeNotice = $"{cell.AddressText} = {cell.ValueText} 로 썼습니다.";
+    }
+
+    partial void OnSelectedRangeCellChanged(RangeCellViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedRangeCell));
+        SelectedRangeValueText = value?.ValueText ?? string.Empty;
+    }
+
+    partial void OnRangeFormatOptionChanged(DisplayOption<WatchFormat> value) => ReExpandIfShown();
+
+    partial void OnRangeOrderOptionChanged(DisplayOption<ByteOrder> value) => ReExpandIfShown();
+
+    /// <summary>형식·순서를 바꾸면 이미 펼쳐 둔 칸에도 곧바로 반영한다.</summary>
+    private void ReExpandIfShown()
+    {
+        if (RangeCells.Count > 0)
+        {
+            ExpandRange();
+        }
     }
 
     /// <summary>사용자 지정 워치 목록.</summary>
@@ -683,6 +866,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             point.Refresh();
         }
 
+        foreach (var cell in RangeCells)
+        {
+            cell.Refresh();
+        }
+
         RefreshTraffic();
         OnPropertyChanged(nameof(CaptureSummary));
         NotifyServerState();
@@ -774,7 +962,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         Engine?.Dispose();
         Engine = new SimulatorEngine(
-            project, _codecFactory, trafficSink: _trafficLog, frameRecorder: _frameRecorder);
+            project, _codecFactory, timeSource: _timeSource,
+            trafficSink: _trafficLog, frameRecorder: _frameRecorder);
 
         BindAddressText = project.Server.BindAddress;
         PortText = project.Server.Port.ToString(CultureInfo.InvariantCulture);

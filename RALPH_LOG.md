@@ -635,3 +635,33 @@ Tests 567/567 (Core 344 + Integration 61 + App 162) · 빌드 경고0/에러0
 [변경] 기존 테스트 WriteWithWrongValueLengthIsRejectedWithDataSizeMismatch 는 옛 규칙을 고정하고
   있었다. 지우지 않고 새 규칙(WriteLengthComesFromTheFrameNotFromTheNameWidth)을 단언하도록 바꿨다.
 Next: spec §5 에러 코드 표 확정 (매뉴얼 필요) · 이번 수정의 현장 확인
+
+## M19 — 범위 보기 탭 + 램프까지 잇는 e2e 검증 (사용자 지시) · 2026-08-14
+Status ✅ (증상 미재현 — 아래 참조)
+Files: src/Nxs.Core/Memory/AddressRange.cs, src/Nxs.Core/Simulator/SimulatorEngine.cs,
+  src/Nxs.App/ViewModels/{RangeCellViewModel,MainWindowViewModel}.cs,
+  src/Nxs.App/{App.axaml,Views/MainWindow.axaml}, tools/Nxs.DocShots/Program.cs, README.md,
+  tests/Nxs.Core.Tests/Memory/AddressRangeTests.cs,
+  tests/Nxs.App.Tests/{RangeViewTests,MasterWriteLightsTheLampTests,TabRenderTests,TrafficFilterUiTests}.cs
+Tests 617/617 (Core 366 + Integration 61 + App 190) · 빌드 경고0/에러0
+
+[증상] "랩뷰가 보낸 것이 트래픽 로그에는 찍히는데 디지털 I/O 불이 안 들어온다."
+[검증] **소켓 → 서버 → 코덱 → 메모리 → 뷰모델 → LED** 전 구간을 지나는 테스트를 새로 만들었다
+  (MasterWriteLightsTheLampTests). 코덱 테스트는 메모리까지만, 뷰모델 테스트는 메모리부터만
+  검사해 그 사이의 끊김을 놓칠 수 있었다 — 그 빈틈을 메웠다.
+  워드 쓰기(크기필드 유/무 양쪽) · 현장 모양(이름 %MW000 + 4바이트) · 비트 쓰기 ·
+  워치/AD 반영 · 트래픽 거절 없음까지 6건 모두 통과한다.
+[결론] **내가 만들 수 있는 모든 프레임 모양에서 램프까지 값이 도달한다 — 증상을 재현하지 못했다.**
+  즉 현장 프레임이 내 재현과 다르다. 추측으로 또 고치는 것은 앞선 세 번과 같은 실수이므로 하지 않는다.
+  대신 사용자가 스스로 답을 찾을 수 있는 화면을 만들었다(아래).
+[결정] **범위 보기 탭.** 마스터가 어느 주소를 건드리는지 모를 때 주소를 하나씩 추가해 찾는 것은
+  현실적이지 않다. 시작 주소 + 개수(10/100/300/500/1000 버튼 · 직접 입력, 최대 4096)로 한 번에 펼친다.
+  **방금 값이 바뀐 칸에 색이 들어온다(3초)** — 이 화면의 핵심은 값 나열이 아니라 이 표시다.
+  랩뷰의 쓰기가 실제로 어디에 떨어지는지(혹은 아예 안 떨어지는지)가 눈으로 확인된다.
+[결정] 증분은 **표기 단위**다(%MW100 다음은 %MW101). 바이트로 환산하면 화면 번지와 어긋난다.
+[결정] 칸이 수천 개일 수 있으므로 가상화 ListBox + WrapPanel 을 쓰고, 값이 그대로면
+  속성 알림을 내지 않는다. 200ms 주기로 1000칸을 훑어도 UI 가 버티게 하는 조건이다.
+[결정] 변경 표시 시간은 ITimeSource 로 주입한다(CLAUDE.md §4.2) — 3초를 실시간으로 기다리는
+  테스트는 느리고 불안정하다. FakeTimeSource 로 경계 직전/직후를 정확히 고정했다.
+[결정] 칸을 고르면 그 자리에서 값을 쓰거나 워치로 옮길 수 있다 — 찾은 주소를 계속 지켜보는 경로.
+Next: spec §5 에러 코드 표 확정 · **현장 프레임 전문 확보**(트래픽 행 클릭 → 전문 패널)

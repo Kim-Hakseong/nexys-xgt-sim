@@ -63,6 +63,7 @@ public sealed class SimulatorEngine : IDisposable
         Memory = new PlcMemory(new PlcMemoryOptions { Addressing = project.Io.Addressing });
         project.ApplyInitialValues(Memory);
         Automation = new AutomationEngine(Memory, _time, project.BuildAutomationRules());
+        TimeSource = _time;
     }
 
     /// <summary>원본 프로젝트.</summary>
@@ -70,6 +71,9 @@ public sealed class SimulatorEngine : IDisposable
 
     /// <summary>PLC 메모리. UI와 서버가 공유한다.</summary>
     public PlcMemory Memory { get; }
+
+    /// <summary>이 엔진이 쓰는 시간원. 화면 갱신 로직이 같은 시계를 공유하게 한다.</summary>
+    public ITimeSource TimeSource { get; }
 
     /// <summary>모듈 → 메모리 매핑.</summary>
     public IReadOnlyList<ModuleMapping> Map { get; }

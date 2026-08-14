@@ -32,6 +32,7 @@ public static class Program
         (0, "01-digital-io"),
         (1, "02-analog-input"),
         (2, "03-watch"),
+        (3, "04-range"),
     ];
 
     public static int Main(string[] args)
@@ -160,7 +161,7 @@ public static class Program
         Settle(window);
 
         var tabControl = window.GetLogicalDescendants().OfType<TabControl>().First();
-        tabControl.SelectedIndex = 3;
+        tabControl.SelectedIndex = 4;   // 트래픽 로그
         Settle(window);
 
         // 거절된 행을 골라 전문 패널이 어떻게 보이는지 함께 담는다 — 진단 흐름의 핵심이다.
@@ -168,17 +169,17 @@ public static class Program
             viewModel.TrafficRows.LastOrDefault(r => r.IsError) ?? viewModel.TrafficRows.LastOrDefault();
         Settle(window);
 
-        var path = Path.Combine(outputDirectory, "04-traffic-log.png");
+        var path = Path.Combine(outputDirectory, "05-traffic-log.png");
         using var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {
-            Console.Error.WriteLine("렌더 실패: 04-traffic-log");
+            Console.Error.WriteLine("렌더 실패: 05-traffic-log");
             viewModel.Shutdown();
             return false;
         }
 
         frame.Save(path);
-        Console.WriteLine($"04-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
+        Console.WriteLine($"05-traffic-log.png  ({new FileInfo(path).Length / 1024}KB · 합성 코덱 세션)");
         viewModel.Shutdown();
         return true;
     }
@@ -303,6 +304,26 @@ public static class Program
         // (형식이 파싱 규칙을 정하므로 순서가 뒤바뀌면 다른 바이트가 들어간다).
         viewModel.AnalogPoints[3].Format = Core.Configuration.WatchFormat.Float;
         viewModel.AnalogPoints[3].EngineeringText = "3.75";
+
+        // 범위 보기 — 마스터가 값을 바꾼 칸이 물드는 모습을 담는다
+        for (var i = 0; i < 100; i += 7)
+        {
+            viewModel.Engine.Memory.WriteScalar(
+                Core.Memory.IecAddress.Parse($"%MW{i}"), (uint)(0x1000 + (i * 13)));
+        }
+
+        viewModel.RangeStartAddress = "%MW0";
+        viewModel.RangeCountText = "100";
+        viewModel.ExpandRangeCommand.Execute(null);
+
+        // 펼친 뒤에 몇 칸을 바꿔 "방금 바뀐 칸" 표시가 어떻게 보이는지 함께 담는다.
+        foreach (var offset in new[] { 3, 4, 21, 22 })
+        {
+            viewModel.Engine.Memory.WriteScalar(
+                Core.Memory.IecAddress.Parse($"%MW{offset}"), (uint)(0xBE00 + offset));
+        }
+
+        viewModel.Refresh();
 
         // 사용자 지정 디지털 점 — 임의 비트 주소를 양방향으로 확인
         foreach (var (address, label) in new[]

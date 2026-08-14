@@ -409,5 +409,27 @@
       <Setter Property="CornerRadius" Value="12" />
       <Setter Property="Padding" Value="14,10" />
     </Style>
-  </Application.Styles>
+  
+  <!-- 범위 보기 칸 — 방금 바뀐 칸이 눈에 띄어야 마스터의 쓰기 위치를 찾을 수 있다 -->
+  <Style Selector="Border.rangeCell">
+    <Setter Property="Width" Value="118" />
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="Margin" Value="0,0,6,6" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Background" Value="{StaticResource CardSoftBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+  </Style>
+
+  <Style Selector="Border.rangeCell.changed">
+    <Setter Property="Background" Value="{StaticResource ConnectedGlowBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource ConnectedBrush}" />
+  </Style>
+
+  <Style Selector="ListBox#RangeCellList ListBoxItem">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+</Application.Styles>
 </Application>
