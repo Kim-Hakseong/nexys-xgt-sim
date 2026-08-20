@@ -1192,17 +1192,59 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        foreach (var bit in DigitalGroups.SelectMany(g => g.Bits).Where(b => b.IsOn))
-        {
-            initial.Add(new InitialValue { Address = bit.AddressText, Value = 1 });
-        }
+        // 화면에 등록된 **모든 주소의 현재 값**을 저장한다 — 워치·디지털·A/D·묶음 멤버 전부.
+        // (예전에는 디지털 켜진 비트와 A/D 만 저장해서, 워치에 넣어 둔 값이 다시 열면 사라졌다.)
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var addresses = Watches.Select(w => w.Address)
+            .Concat(DigitalGroups.Select(g => g.Address))
+            .Concat(AnalogPoints.Select(a => a.Address))
+            .Concat(LinkGroups.SelectMany(g => g.Group.Members));
 
-        foreach (var point in AnalogPoints)
+        foreach (var address in addresses)
         {
-            var raw = Engine.Memory.ReadScalar(point.Address);
-            if (raw != 0)
+            if (!seen.Add(address.Text))
             {
-                initial.Add(new InitialValue { Address = point.AddressText, Value = raw });
+                continue;
+            }
+
+            var raw = Engine.Memory.ReadRaw(address);
+            if (raw.All(b => b == 0))
+            {
+                continue;   // 메모리는 0에서 시작하므로 0은 저장할 필요가 없다.
+            }
+
+            if (address.Size == DataSize.Bit)
+            {
+                initial.Add(new InitialValue { Address = address.Text, Value = 1 });
+            }
+            else if (address.ByteLength <= 4)
+            {
+                initial.Add(new InitialValue
+                {
+                    Address = address.Text,
+                    Value = Engine.Memory.ReadScalar(address),
+                });
+            }
+            else
+            {
+                // %ML(8바이트)은 32비트 InitialValue 에 담기지 않는다 — 같은 자리를 가리키는
+                // 더블워드 두 개로 쪼갠다 (%ML 의 시작 바이트는 항상 4의 배수다).
+                var letter = address.Area switch
+                {
+                    MemoryArea.I => 'I',
+                    MemoryArea.Q => 'Q',
+                    _ => 'M',
+                };
+                var half = address.ByteStart / 4;
+                for (var i = 0; i < 2; i++)
+                {
+                    var part = IecAddress.Parse($"%{letter}D{half + i}");
+                    var value = Engine.Memory.ReadScalar(part);
+                    if (value != 0)
+                    {
+                        initial.Add(new InitialValue { Address = part.Text, Value = value });
+                    }
+                }
             }
         }
 
